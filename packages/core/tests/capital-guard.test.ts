@@ -37,4 +37,27 @@ describe('CapitalGuard', () => {
     guard.release(500)
     expect(guard.availableCapital()).toBe(1000)
   })
+
+  it('rejects zero-size canTrade', () => {
+    expect(guard.canTrade(0)).toBe(false)
+  })
+
+  it('rejects negative canTrade', () => {
+    expect(guard.canTrade(-50)).toBe(false)
+  })
+
+  it('throws on reserve with non-positive size', () => {
+    expect(() => guard.reserve(0)).toThrow('Reserve size must be positive')
+    expect(() => guard.reserve(-100)).toThrow('Reserve size must be positive')
+  })
+
+  it('throws on release with non-positive size', () => {
+    expect(() => guard.release(0)).toThrow('Release size must be positive')
+    expect(() => guard.release(-100)).toThrow('Release size must be positive')
+  })
+
+  it('throws on construction with non-positive capital', () => {
+    expect(() => new CapitalGuard({ totalCapital: 0 })).toThrow('Total capital must be positive')
+    expect(() => new CapitalGuard({ totalCapital: -500 })).toThrow('Total capital must be positive')
+  })
 })
