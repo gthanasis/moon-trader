@@ -1,0 +1,22 @@
+{
+  "name": "@trader/bot",
+  "version": "0.0.1",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@trader/shared": "workspace:*",
+    "@trader/db": "workspace:*",
+    "grammy": "^1.0.0"
+  }
+}
