@@ -20,7 +20,6 @@ export default async function TradesPage({ searchParams }: TradesPageProps) {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">Trade History</h1>
       <TradesTable trades={pageTrades} />
       <div className="flex gap-2 mt-4">
         {page > 1 && (
