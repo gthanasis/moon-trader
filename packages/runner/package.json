@@ -11,6 +11,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "dev": "tsx watch src/main.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "start": "node dist/main.js"
@@ -26,6 +27,7 @@
     "node-cron": "^3.0.0"
   },
   "devDependencies": {
-    "@types/node-cron": "^3.0.11"
+    "@types/node-cron": "^3.0.11",
+    "tsx": "^4.0.0"
   }
 }
