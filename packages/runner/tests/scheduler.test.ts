@@ -24,8 +24,8 @@ describe('Scheduler', () => {
   it('stop() cancels the scheduled job', () => {
     const scheduler = new Scheduler({ run: vi.fn() }, '*/15 * * * *')
     scheduler.start()
+    expect(scheduler['task']).not.toBeNull()
     scheduler.stop()
-    // After stop, task should be null
     expect(scheduler['task']).toBeNull()
   })
 })

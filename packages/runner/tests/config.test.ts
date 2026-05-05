@@ -30,6 +30,7 @@ describe('loadConfig', () => {
     delete process.env['ANTHROPIC_API_KEY']
     delete process.env['TOTAL_CAPITAL']
     delete process.env['AUTO_TRADE_LIMIT']
+    delete process.env['OHLCV_LIMIT']
     delete process.env['COINS']
     delete process.env['TIMEFRAME']
     delete process.env['PAPER']
@@ -64,6 +65,7 @@ describe('loadConfig', () => {
       const config = loadConfig()
       expect(config.totalCapital).toBe(1000)
       expect(config.autoTradeLimit).toBe(50)
+      expect(config.ohlcvLimit).toBe(100)
       expect(config.coins).toEqual(['BTC/USDT', 'ETH/USDT'])
       expect(config.timeframe).toBe('15m')
       expect(config.paper).toBe(true)
