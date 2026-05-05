@@ -114,4 +114,21 @@ describe('Pipeline with ohlcvSource', () => {
     const snapshot = await pipeline.fetch()
     expect(snapshot.ohlcv).toEqual({})
   })
+
+  it('fetchHistorical returns empty ohlcv regardless of ohlcvSource', async () => {
+    const ohlcvSource: OhlcvSource = {
+      id: 'mock-ohlcv',
+      fetchOhlcv: async () => ({ 'BTC/USDT': [makeCandle(1000)] }),
+    }
+    const pipeline = new Pipeline({
+      sources: [],
+      ohlcvSource,
+      coins: ['BTC/USDT'],
+      timeframe: '15m',
+      ohlcvLimit: 100,
+    })
+
+    const snapshot = await pipeline.fetchHistorical(new Date(0), new Date())
+    expect(snapshot.ohlcv).toEqual({})
+  })
 })

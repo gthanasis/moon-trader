@@ -23,7 +23,10 @@ export class Pipeline {
     const [signalResults, ohlcv] = await Promise.all([
       Promise.allSettled(sources.map(source => source.fetch())),
       ohlcvSource && coins?.length
-        ? ohlcvSource.fetchOhlcv(coins, timeframe, ohlcvLimit).catch(() => ({} as Record<string, Candle[]>))
+        ? ohlcvSource.fetchOhlcv(coins, timeframe, ohlcvLimit).catch((err) => {
+            console.error('[Pipeline] ohlcv fetch failed:', err)
+            return {} as Record<string, Candle[]>
+          })
         : Promise.resolve({} as Record<string, Candle[]>),
     ])
 
@@ -45,6 +48,7 @@ export class Pipeline {
       .flatMap(r => r.value)
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
 
+    // historical OHLCV is provided by BacktestConfig, not fetched live
     return { timestamp: to, signals, ohlcv: {} }
   }
 }
