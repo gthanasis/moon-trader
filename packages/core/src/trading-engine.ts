@@ -1,4 +1,5 @@
 import type { LLMDecision, Position, Order } from '@trader/shared'
+import type { ExchangeAdapter } from './exchange-adapter.js'
 import { CapitalGuard } from './capital-guard.js'
 import { PositionTracker } from './position-tracker.js'
 import { OrderManager } from './order-manager.js'
@@ -6,6 +7,7 @@ import { OrderManager } from './order-manager.js'
 interface TradingEngineConfig {
   totalCapital: number
   paper: boolean
+  exchange?: ExchangeAdapter
 }
 
 interface ExecuteResult {
@@ -22,7 +24,7 @@ export class TradingEngine {
   constructor(config: TradingEngineConfig) {
     this.guard = new CapitalGuard({ totalCapital: config.totalCapital })
     this.positions = new PositionTracker()
-    this.orders = new OrderManager({ paper: config.paper })
+    this.orders = new OrderManager({ paper: config.paper, exchange: config.exchange })
   }
 
   async execute(decision: LLMDecision): Promise<ExecuteResult> {
@@ -70,7 +72,7 @@ export class TradingEngine {
         coin: decision.coin,
         side: 'sell',
         size: decision.size,
-        price: undefined,
+        price: position.currentPrice,
       })
 
       if (order.status === 'filled') {

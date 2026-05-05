@@ -1,4 +1,5 @@
 import type { Order, OrderSide } from '@trader/shared'
+import type { ExchangeAdapter } from './exchange-adapter.js'
 import { randomUUID } from 'crypto'
 
 interface PlaceOrderInput {
@@ -10,14 +11,17 @@ interface PlaceOrderInput {
 
 interface OrderManagerConfig {
   paper: boolean
+  exchange?: ExchangeAdapter
 }
 
 export class OrderManager {
   private readonly paper: boolean
+  private readonly exchange?: ExchangeAdapter
   private orders = new Map<string, Order>()
 
   constructor(config: OrderManagerConfig) {
     this.paper = config.paper
+    this.exchange = config.exchange
   }
 
   async place(input: PlaceOrderInput): Promise<Order> {
@@ -35,6 +39,22 @@ export class OrderManager {
       order.status = 'filled'
       order.filledAt = new Date()
       order.fillPrice = input.price
+    } else if (this.exchange) {
+      if (input.side === 'buy') {
+        const result = await this.exchange.marketBuy(input.coin, input.size)
+        order.status = 'filled'
+        order.filledAt = result.filledAt
+        order.fillPrice = result.fillPrice
+      } else {
+        if (input.price === undefined) {
+          throw new Error(`price is required for live sell orders on ${input.coin}`)
+        }
+        const baseAmount = input.size / input.price
+        const result = await this.exchange.marketSell(input.coin, baseAmount)
+        order.status = 'filled'
+        order.filledAt = result.filledAt
+        order.fillPrice = result.fillPrice
+      }
     }
 
     this.orders.set(order.id, order)
