@@ -147,7 +147,7 @@ describe('BacktestRunner', () => {
     const result = await runner.run()
 
     // from=t0, to=t2, interval=15min → steps at t0 and t1 (t2 is exclusive)
-    expect(result.pnlCurve.length).toBeGreaterThanOrEqual(1)
+    expect(result.pnlCurve.length).toBe(2)
   })
 
   it('skips buy when no fill price is available', async () => {

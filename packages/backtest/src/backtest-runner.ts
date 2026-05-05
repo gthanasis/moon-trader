@@ -1,5 +1,4 @@
-import type { Signal } from '@trader/shared'
-import type { TradingContext } from '@trader/shared'
+import type { Signal, TradingContext } from '@trader/shared'
 import { historicalSlice } from './historical-slice.js'
 import { getFillPrice } from './fill-simulator.js'
 import { calculateStats } from './stats-calculator.js'
@@ -18,12 +17,17 @@ export class BacktestRunner {
 
     // fetch all historical signals upfront
     const allSignals: Signal[] = []
-    await Promise.allSettled(
+    const sourceResults = await Promise.allSettled(
       sources.map(async source => {
         const signals = await source.fetchHistorical(from, to)
         allSignals.push(...signals)
       }),
     )
+    for (const result of sourceResults) {
+      if (result.status === 'rejected') {
+        console.warn('[BacktestRunner] Signal source failed:', result.reason)
+      }
+    }
 
     const trades: BacktestTrade[] = []
     const pnlCurve: PnlPoint[] = []
@@ -84,8 +88,8 @@ export class BacktestRunner {
           openPositions.push({ trade })
         }
       } else if (decision.action === 'sell' && decision.size > 0) {
-        const posIndex = openPositions.map((p, i) => i).filter(i => openPositions[i].trade.coin === decision.coin).at(-1)
-        if (posIndex !== undefined) {
+        const posIndex = openPositions.findLastIndex(p => p.trade.coin === decision.coin)
+        if (posIndex !== -1) {
           const fillPrice = getFillPrice(ohlcv[decision.coin] ?? [], currentTime)
           if (fillPrice !== undefined) {
             const pos = openPositions[posIndex]
@@ -100,7 +104,13 @@ export class BacktestRunner {
         }
       }
 
-      pnlCurve.push({ timestamp: currentTime, capital })
+      const openPositionValue = openPositions.reduce((sum, p) => {
+        const currentPrice =
+          [...(ohlcv[p.trade.coin] ?? [])].reverse().find(c => c.timestamp.getTime() <= current)?.close ??
+          p.trade.entryPrice
+        return sum + (p.trade.size / p.trade.entryPrice) * currentPrice
+      }, 0)
+      pnlCurve.push({ timestamp: currentTime, capital: capital + openPositionValue })
       current += intervalMs
     }
 
