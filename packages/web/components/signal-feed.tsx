@@ -31,7 +31,7 @@ export function SignalFeed({ signals }: SignalFeedProps) {
             <div>
               <div style={{ fontSize: '9.5px', fontFamily: 'monospace', color: 'var(--muted)', marginBottom: '2px' }}>
                 <span className="xp">
-                  {s.source.toUpperCase()} · {s.type}{coins ? ` · [${coins}]` : ''}
+                  {s.source?.toUpperCase() ?? ''} · {s.type ?? ''}{coins ? ` · [${coins}]` : ''}
                 </span>
                 <span className="nb">
                   {s.type.charAt(0).toUpperCase() + s.type.slice(1)}{coins ? ` · ${coins.toUpperCase()}` : ''}

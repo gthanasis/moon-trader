@@ -1,5 +1,6 @@
 'use client'
 
+import { useId } from 'react'
 import type { PnlPoint } from '@trader/backtest'
 
 interface BacktestChartProps {
@@ -11,6 +12,7 @@ const H = 200
 const PAD = { top: 10, right: 20, bottom: 30, left: 60 }
 
 export function BacktestChart({ pnlCurve }: BacktestChartProps) {
+  const gradientId = useId()
   if (pnlCurve.length < 2) return null
 
   const pts = pnlCurve.map(p => ({
@@ -44,7 +46,7 @@ export function BacktestChart({ pnlCurve }: BacktestChartProps) {
       aria-label="P&L curve"
     >
       <defs>
-        <linearGradient id="pnl-fill" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%"   stopColor="var(--pos)" stopOpacity="0.25" />
           <stop offset="100%" stopColor="var(--pos)" stopOpacity="0.02" />
         </linearGradient>
@@ -77,7 +79,7 @@ export function BacktestChart({ pnlCurve }: BacktestChartProps) {
         )
       })}
 
-      <polygon points={areaPoints} fill="url(#pnl-fill)" />
+      <polygon points={areaPoints} fill={`url(#${gradientId})`} />
       <polyline points={linePoints}
         fill="none" stroke="var(--pos)" strokeWidth="1.5" strokeLinejoin="round" />
     </svg>

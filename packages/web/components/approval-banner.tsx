@@ -30,14 +30,23 @@ export function ApprovalBanner({ decision, onDismiss }: ApprovalBannerProps) {
   const countdown = useCountdown(decision.expiresAt)
   const [loading, setLoading] = useState(false)
 
+  const [error, setError] = useState<string | null>(null)
+
   const respond = useCallback(async (status: 'approved' | 'rejected') => {
     setLoading(true)
-    await fetch(`/api/decisions/${decision.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
-    })
-    onDismiss()
+    setError(null)
+    try {
+      const res = await fetch(`/api/decisions/${decision.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      })
+      if (!res.ok) throw new Error(`Server error ${res.status}`)
+      onDismiss()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Request failed')
+      setLoading(false)
+    }
   }, [decision.id, onDismiss])
 
   const actionLabel = decision.action.toUpperCase()
@@ -100,6 +109,8 @@ export function ApprovalBanner({ decision, onDismiss }: ApprovalBannerProps) {
       <div style={{ fontSize: '11.5px', color: 'var(--muted)', lineHeight: 1.5 }}>
         {decision.reasoning}
       </div>
+
+      {error && <div style={{ fontSize: '10px', color: 'var(--neg)' }}>{error}</div>}
 
       <div style={{ display: 'flex', gap: '8px' }}>
         <button
