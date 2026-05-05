@@ -34,8 +34,12 @@ export function StatCard({ label, labelSimple, value, sub, subSimple, colorVaria
     onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
     >
       <div style={{ fontFamily: 'monospace', fontSize: '10px', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>
-        <span className="xp">{label}</span>
-        {labelSimple && <span className="nb">{labelSimple}</span>}
+        {labelSimple ? (
+          <>
+            <span className="xp">{label}</span>
+            <span className="nb">{labelSimple}</span>
+          </>
+        ) : label}
       </div>
       <div style={{ fontFamily: 'monospace', fontSize: '20px', fontWeight: 600, color: valueColor, fontVariantNumeric: 'tabular-nums', marginBottom: sub || subSimple ? '4px' : 0 }}>
         {value}
