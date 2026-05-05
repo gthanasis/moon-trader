@@ -67,25 +67,27 @@ describe('TradingEngine', () => {
   })
 })
 
-it('passes currentPrice to OrderManager when selling live', async () => {
-  const sellSpy = vi.fn(async (): Promise<ExecutedOrder> => ({
-    orderId: 'sell-1', fillPrice: 51000, filledAt: new Date(), baseAmount: 0.004,
-  }))
-  const exchange: ExchangeAdapter = {
-    marketBuy: vi.fn(async (): Promise<ExecutedOrder> => ({
-      orderId: 'buy-1', fillPrice: 50000, filledAt: new Date(), baseAmount: 0.004,
-    })),
-    marketSell: sellSpy,
-  }
-  const engine = new TradingEngine({ totalCapital: 1000, paper: false, exchange })
+describe('TradingEngine live mode', () => {
+  it('passes currentPrice to OrderManager when selling live', async () => {
+    const sellSpy = vi.fn(async (): Promise<ExecutedOrder> => ({
+      orderId: 'sell-1', fillPrice: 51000, filledAt: new Date(), baseAmount: 0.004,
+    }))
+    const exchange: ExchangeAdapter = {
+      marketBuy: vi.fn(async (): Promise<ExecutedOrder> => ({
+        orderId: 'buy-1', fillPrice: 50000, filledAt: new Date(), baseAmount: 0.004,
+      })),
+      marketSell: sellSpy,
+    }
+    const engine = new TradingEngine({ totalCapital: 1000, paper: false, exchange })
 
-  // First buy to open a position
-  await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy' })
-  await engine.execute({ action: 'sell', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'sell' })
+    // First buy to open a position
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy' })
+    await engine.execute({ action: 'sell', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'sell' })
 
-  expect(sellSpy).toHaveBeenCalled()
-  // marketSell called with base amount = 200 / 50000 = 0.004
-  const [coin, baseAmount] = (sellSpy as ReturnType<typeof vi.fn>).mock.calls[0] as [string, number]
-  expect(coin).toBe('BTC/USDT')
-  expect(baseAmount).toBeCloseTo(0.004, 5)
+    expect(sellSpy).toHaveBeenCalled()
+    // marketSell called with base amount = 200 / 50000 = 0.004
+    const [coin, baseAmount] = (sellSpy as ReturnType<typeof vi.fn>).mock.calls[0] as [string, number]
+    expect(coin).toBe('BTC/USDT')
+    expect(baseAmount).toBeCloseTo(0.004, 5)
+  })
 })

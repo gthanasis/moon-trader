@@ -68,6 +68,8 @@ export class TradingEngine {
         return { executed: false, reason: `No open position for ${decision.coin}` }
       }
 
+      // currentPrice must be kept up-to-date via PositionTracker before execute() is called;
+      // it is used only to compute the base amount for the live sell, not as an actual order price
       const order = await this.orders.place({
         coin: decision.coin,
         side: 'sell',
