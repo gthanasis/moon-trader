@@ -9,6 +9,7 @@ export default defineConfig({
       '@trader/shared': resolve(__dirname, './packages/shared/dist'),
       '@trader/llm': resolve(__dirname, './packages/llm/dist'),
       '@trader/backtest': resolve(__dirname, './packages/backtest/dist'),
+      '@trader/runner': resolve(__dirname, './packages/runner/dist'),
     },
   },
   test: {

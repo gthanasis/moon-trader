@@ -1,0 +1,29 @@
+{
+  "name": "@trader/runner",
+  "version": "0.0.1",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@trader/core": "workspace:*",
+    "@trader/data": "workspace:*",
+    "@trader/llm": "workspace:*",
+    "@trader/shared": "workspace:*",
+    "ccxt": "^4.0.0",
+    "node-cron": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node-cron": "^3.0.11"
+  }
+}
