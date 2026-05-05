@@ -1,7 +1,6 @@
 {
   "name": "@trader/backtest",
-  "version": "0.1.0",
-  "type": "module",
+  "version": "0.0.1",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -12,6 +11,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
@@ -19,9 +19,5 @@
     "@trader/llm": "workspace:*",
     "@trader/data": "workspace:*",
     "@trader/core": "workspace:*"
-  },
-  "devDependencies": {
-    "typescript": "^5.0.0",
-    "vitest": "^2.0.0"
   }
 }
