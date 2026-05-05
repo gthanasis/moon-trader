@@ -1,0 +1,7 @@
+export { getPrismaClient } from './client.js'
+export type { PrismaClient } from './client.js'
+export { TradeRepository } from './repositories/trade-repository.js'
+export { SignalRepository } from './repositories/signal-repository.js'
+export { DecisionRepository } from './repositories/decision-repository.js'
+export { CandleRepository } from './repositories/candle-repository.js'
+export { BotStateRepository } from './repositories/bot-state-repository.js'

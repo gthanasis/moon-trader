@@ -1,4 +1,5 @@
 import type { Signal } from '@trader/shared'
+import { Prisma } from '@prisma/client'
 import type { PrismaClient } from '@prisma/client'
 
 export class SignalRepository {
@@ -10,7 +11,7 @@ export class SignalRepository {
       data: signals.map(s => ({
         source: s.source, type: s.type, content: s.content,
         timestamp: s.timestamp, coins: s.coins ?? [],
-        raw: s.raw !== undefined ? (s.raw as object) : null,
+        raw: s.raw !== undefined ? (s.raw as Prisma.InputJsonValue) : Prisma.DbNull,
       })),
     })
   }
