@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { BacktestRunner } from '../src/backtest-runner.js'
 import type { BacktestConfig } from '../src/types.js'
-import type { LLMDecision } from '@trader/shared'
-import type { Candle } from '@trader/shared'
+import type { LLMDecision, Candle } from '@trader/shared'
 
 function makeCandle(timestamp: Date, open: number): Candle {
   return { timestamp, open, high: open * 1.01, low: open * 0.99, close: open * 1.005, volume: 100 }
@@ -51,6 +50,6 @@ describe('BacktestRunner integration', () => {
     expect(result.stats.winRate).toBeGreaterThanOrEqual(0)
     expect(result.stats.winRate).toBeLessThanOrEqual(1)
     expect(result.stats.maxDrawdown).toBeGreaterThanOrEqual(0)
-    expect(result.pnlCurve[0].capital).toBeGreaterThan(0)
+    expect(result.pnlCurve[0].capital).toBeCloseTo(1000, -1)
   })
 })
