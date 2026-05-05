@@ -1,4 +1,4 @@
-import type { Signal, TradingContext } from '@trader/shared'
+import type { Signal, TradingContext, Candle } from '@trader/shared'
 import { historicalSlice } from './historical-slice.js'
 import { getFillPrice } from './fill-simulator.js'
 import { calculateStats } from './stats-calculator.js'
@@ -8,11 +8,18 @@ interface OpenPosition {
   trade: BacktestTrade
 }
 
+function lastCandleAtOrBefore(candles: Candle[], timestamp: number): Candle | undefined {
+  for (let i = candles.length - 1; i >= 0; i--) {
+    if (candles[i].timestamp.getTime() <= timestamp) return candles[i]
+  }
+  return undefined
+}
+
 export class BacktestRunner {
   constructor(private readonly config: BacktestConfig) {}
 
   async run(): Promise<BacktestResult> {
-    const { from, to, initialCapital, sources, ohlcv, adapter } = this.config
+    const { from, to, initialCapital, autoTradeLimit, coins, sources, ohlcv, adapter } = this.config
     const intervalMs = this.config.intervalMs ?? 15 * 60 * 1000
 
     // fetch all historical signals upfront
@@ -50,7 +57,7 @@ export class BacktestRunner {
           size: p.trade.size,
           entryPrice: p.trade.entryPrice,
           currentPrice:
-            [...(ohlcv[p.trade.coin] ?? [])].reverse().find(c => c.timestamp.getTime() <= current)?.close ??
+            lastCandleAtOrBefore(ohlcv[p.trade.coin] ?? [], current)?.close ??
             p.trade.entryPrice,
           openedAt: p.trade.openedAt,
         })),
@@ -72,20 +79,25 @@ export class BacktestRunner {
 
       const decision = await adapter.decide(context)
 
-      if (decision.action === 'buy' && decision.size > 0 && capital >= decision.size) {
-        const fillPrice = getFillPrice(ohlcv[decision.coin] ?? [], currentTime)
-        if (fillPrice !== undefined) {
-          const trade: BacktestTrade = {
-            coin: decision.coin,
-            side: 'buy',
-            size: decision.size,
-            entryPrice: fillPrice,
-            openedAt: currentTime,
-            reasoning: decision.reasoning,
+      if (decision.action !== 'hold' && !coins.includes(decision.coin)) {
+        // skip unknown coins
+      } else if (decision.action === 'buy' && decision.size > 0 && capital >= decision.size) {
+        const tradeSize = Math.min(decision.size, autoTradeLimit)
+        if (tradeSize > 0 && capital >= tradeSize) {
+          const fillPrice = getFillPrice(ohlcv[decision.coin] ?? [], currentTime)
+          if (fillPrice !== undefined) {
+            const trade: BacktestTrade = {
+              coin: decision.coin,
+              side: 'buy',
+              size: tradeSize,
+              entryPrice: fillPrice,
+              openedAt: currentTime,
+              reasoning: decision.reasoning,
+            }
+            capital -= tradeSize
+            trades.push(trade)
+            openPositions.push({ trade })
           }
-          capital -= decision.size
-          trades.push(trade)
-          openPositions.push({ trade })
         }
       } else if (decision.action === 'sell' && decision.size > 0) {
         let posIndex = -1
@@ -109,7 +121,7 @@ export class BacktestRunner {
 
       const openPositionValue = openPositions.reduce((sum, p) => {
         const currentPrice =
-          [...(ohlcv[p.trade.coin] ?? [])].reverse().find(c => c.timestamp.getTime() <= current)?.close ??
+          lastCandleAtOrBefore(ohlcv[p.trade.coin] ?? [], current)?.close ??
           p.trade.entryPrice
         return sum + (p.trade.size / p.trade.entryPrice) * currentPrice
       }, 0)
