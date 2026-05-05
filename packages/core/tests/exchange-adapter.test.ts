@@ -43,7 +43,7 @@ describe('CcxtExchangeAdapter', () => {
     expect(result.orderId).toBe('buy-1')
     expect(result.fillPrice).toBe(50000)
     expect(result.baseAmount).toBe(0.004)
-    expect(result.filledAt).toBeInstanceOf(Date)
+    expect(result.filledAt).toEqual(new Date('2024-01-01T00:00:00.000Z'))
   })
 
   it('marketSell calls createMarketSellOrder with coin and base amount', async () => {

@@ -15,6 +15,7 @@ interface CcxtOrderResult {
   average?: number
   price?: number
   amount: number
+  filled?: number
   datetime?: string
   timestamp?: number
 }
@@ -31,7 +32,7 @@ function toExecutedOrder(order: CcxtOrderResult): ExecutedOrder {
     filledAt: order.datetime
       ? new Date(order.datetime)
       : new Date(order.timestamp ?? Date.now()),
-    baseAmount: order.amount,
+    baseAmount: order.filled ?? order.amount,
   }
 }
 
