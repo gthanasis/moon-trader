@@ -41,7 +41,7 @@ model Signal {
 }
 
 model LlmDecision {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   action      String
   coin        String
   size        Float
@@ -49,12 +49,15 @@ model LlmDecision {
   reasoning   String
   stopLoss    Float?
   takeProfit  Float?
-  decidedAt   DateTime @default(now())
+  status      String    @default("executed")
+  expiresAt   DateTime?
+  decidedAt   DateTime  @default(now())
   tradeId     String?
-  trade       Trade?   @relation(fields: [tradeId], references: [id])
+  trade       Trade?    @relation(fields: [tradeId], references: [id])
 
   @@index([decidedAt])
   @@index([coin])
+  @@index([status])
 }
 
 model Candle {
