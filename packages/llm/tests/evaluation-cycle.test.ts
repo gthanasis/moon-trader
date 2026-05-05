@@ -1,5 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { EvaluationCycle } from '../src/evaluation-cycle.js'
+import type { CycleResult } from '../src/evaluation-cycle.js'
 import type { LLMAdapter } from '../src/adapters/base.js'
 import type { LLMDecision } from '@trader/shared'
 
@@ -88,5 +89,94 @@ describe('EvaluationCycle', () => {
     const contextArg = mockDecide.mock.calls[0][0]
     expect(contextArg.availableCapital).toBe(900)
     expect(contextArg.positions).toHaveLength(1)
+  })
+})
+
+// Appended after the existing describe block — reuses module-level mocks
+describe('EvaluationCycle with notifier', () => {
+  function makeNotifier() {
+    return {
+      tradeExecuted: vi.fn().mockResolvedValue(undefined),
+      capitalAlert: vi.fn().mockResolvedValue(undefined),
+      cycleError: vi.fn().mockResolvedValue(undefined),
+    }
+  }
+
+  beforeEach(() => {
+    mockFetch.mockResolvedValue(emptySnapshot)
+    mockDecide.mockReset()
+    mockExecute.mockReset()
+    mockExecute.mockResolvedValue({ executed: true, order: { fillPrice: 50000 } })
+    mockEngine.getPositions.mockReturnValue([])
+    mockEngine.availableCapital.mockReturnValue(1000)
+  })
+
+  it('calls notifier.tradeExecuted after a successful auto-trade', async () => {
+    mockDecide.mockResolvedValue(buySmall)
+    const notifier = makeNotifier()
+    const cycle = new EvaluationCycle({
+      pipeline: mockPipeline as any,
+      adapter: mockAdapter,
+      engine: mockEngine as any,
+      autoTradeLimit: 100,
+      notifier,
+    })
+
+    const result: CycleResult = await cycle.run()
+
+    expect(result.executed).toBe(true)
+    expect(notifier.tradeExecuted).toHaveBeenCalledOnce()
+    const call = notifier.tradeExecuted.mock.calls[0][0] as {
+      coin: string; side: string; size: number; fillPrice: number; reasoning: string
+    }
+    expect(call.coin).toBe('BTC/USDT')
+    expect(call.side).toBe('buy')
+    expect(call.size).toBe(30)
+    expect(call.reasoning).toBe('strong')
+  })
+
+  it('does not call notifier.tradeExecuted when decision is hold', async () => {
+    mockDecide.mockResolvedValue(holdDecision)
+    const notifier = makeNotifier()
+    const cycle = new EvaluationCycle({
+      pipeline: mockPipeline as any,
+      adapter: mockAdapter,
+      engine: mockEngine as any,
+      autoTradeLimit: 100,
+      notifier,
+    })
+
+    await cycle.run()
+
+    expect(notifier.tradeExecuted).not.toHaveBeenCalled()
+  })
+
+  it('does not call notifier.tradeExecuted when approval is rejected', async () => {
+    mockDecide.mockResolvedValue(buyLarge)
+    const notifier = makeNotifier()
+    const cycle = new EvaluationCycle({
+      pipeline: mockPipeline as any,
+      adapter: mockAdapter,
+      engine: mockEngine as any,
+      autoTradeLimit: 50,
+      onApprovalNeeded: async () => false,
+      notifier,
+    })
+
+    await cycle.run()
+
+    expect(notifier.tradeExecuted).not.toHaveBeenCalled()
+  })
+
+  it('works without a notifier (backwards compatible)', async () => {
+    mockDecide.mockResolvedValue(buySmall)
+    const cycle = new EvaluationCycle({
+      pipeline: mockPipeline as any,
+      adapter: mockAdapter,
+      engine: mockEngine as any,
+      autoTradeLimit: 100,
+    })
+
+    await expect(cycle.run()).resolves.not.toThrow()
   })
 })

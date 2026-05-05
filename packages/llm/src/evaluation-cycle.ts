@@ -6,11 +6,21 @@ interface PipelineLike {
 }
 
 interface EngineLike {
-  execute(decision: LLMDecision): Promise<{ executed: boolean; reason?: string }>
+  execute(decision: LLMDecision): Promise<{ executed: boolean; reason?: string; order?: { fillPrice?: number } }>
   updatePositionPrice(coin: string, price: number): void
   getPositions(): Position[]
   getOpenOrders(): Order[]
   availableCapital(): number
+}
+
+export interface NotifierLike {
+  tradeExecuted(trade: {
+    coin: string
+    side: 'buy' | 'sell'
+    size: number
+    fillPrice: number
+    reasoning: string
+  }): Promise<void>
 }
 
 export interface EvaluationCycleConfig {
@@ -19,6 +29,7 @@ export interface EvaluationCycleConfig {
   engine: EngineLike
   autoTradeLimit: number
   onApprovalNeeded?: (decision: LLMDecision) => Promise<boolean>
+  notifier?: NotifierLike
 }
 
 export interface CycleResult {
@@ -35,7 +46,7 @@ export class EvaluationCycle {
   }
 
   async run(): Promise<CycleResult> {
-    const { pipeline, adapter, engine, autoTradeLimit, onApprovalNeeded } = this.config
+    const { pipeline, adapter, engine, autoTradeLimit, onApprovalNeeded, notifier } = this.config
 
     const snapshot = await pipeline.fetch()
     const context: TradingContext = {
@@ -68,6 +79,17 @@ export class EvaluationCycle {
     }
 
     const result = await engine.execute(decision)
+
+    if (result.executed && notifier) {
+      await notifier.tradeExecuted({
+        coin: decision.coin,
+        side: decision.action as 'buy' | 'sell',
+        size: decision.size,
+        fillPrice: result.order?.fillPrice ?? 0,
+        reasoning: decision.reasoning,
+      })
+    }
+
     return { decision, executed: result.executed, reason: result.reason }
   }
 }
