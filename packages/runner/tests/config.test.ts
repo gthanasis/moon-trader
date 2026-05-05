@@ -34,6 +34,8 @@ describe('loadConfig', () => {
     delete process.env['COINS']
     delete process.env['TIMEFRAME']
     delete process.env['PAPER']
+    delete process.env['TELEGRAM_BOT_TOKEN']
+    delete process.env['TELEGRAM_CHAT_ID']
   })
 
   it('throws when BINANCE_API_KEY is missing', () => {
@@ -96,6 +98,26 @@ describe('loadConfig', () => {
   it('throws when TOTAL_CAPITAL is zero', () => {
     withEnv({ ...requiredEnv, TOTAL_CAPITAL: '0' }, () => {
       expect(() => loadConfig()).toThrow('TOTAL_CAPITAL')
+    })
+  })
+
+  it('includes telegramBotToken and telegramChatId as undefined when not set', () => {
+    withEnv(requiredEnv, () => {
+      const config = loadConfig()
+      expect(config.telegramBotToken).toBeUndefined()
+      expect(config.telegramChatId).toBeUndefined()
+    })
+  })
+
+  it('reads TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID when set', () => {
+    withEnv({
+      ...requiredEnv,
+      TELEGRAM_BOT_TOKEN: 'bot123:token',
+      TELEGRAM_CHAT_ID: '987654',
+    }, () => {
+      const config = loadConfig()
+      expect(config.telegramBotToken).toBe('bot123:token')
+      expect(config.telegramChatId).toBe('987654')
     })
   })
 })

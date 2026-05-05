@@ -10,6 +10,7 @@ export default defineConfig({
       '@trader/llm': resolve(__dirname, './packages/llm/dist'),
       '@trader/backtest': resolve(__dirname, './packages/backtest/dist'),
       '@trader/db': resolve(__dirname, './packages/db/dist'),
+      '@trader/bot': resolve(__dirname, './packages/bot/dist'),
       '@trader/runner': resolve(__dirname, './packages/runner/dist'),
     },
   },

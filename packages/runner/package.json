@@ -16,6 +16,7 @@
     "start": "node dist/main.js"
   },
   "dependencies": {
+    "@trader/bot": "workspace:*",
     "@trader/core": "workspace:*",
     "@trader/data": "workspace:*",
     "@trader/db": "workspace:*",

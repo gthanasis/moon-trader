@@ -9,6 +9,8 @@ export interface LiveConfig {
   ohlcvLimit: number
   cronExpression: string
   paper: boolean
+  telegramBotToken?: string
+  telegramChatId?: string
 }
 
 export function loadConfig(): LiveConfig {
@@ -37,5 +39,7 @@ export function loadConfig(): LiveConfig {
     ohlcvLimit: parseNumber('OHLCV_LIMIT', 100, 0),
     cronExpression: process.env['CRON_EXPRESSION'] ?? '*/15 * * * *',
     paper: process.env['PAPER'] !== 'false',
+    telegramBotToken: process.env['TELEGRAM_BOT_TOKEN'],
+    telegramChatId: process.env['TELEGRAM_CHAT_ID'],
   }
 }

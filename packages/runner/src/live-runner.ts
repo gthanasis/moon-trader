@@ -4,6 +4,7 @@ import { ClaudeAdapter, EvaluationCycle } from '@trader/llm'
 import { TradingEngine, CcxtExchangeAdapter } from '@trader/core'
 import { Pipeline, BinanceSource } from '@trader/data'
 import { getPrismaClient, TradeRepository, DecisionRepository } from '@trader/db'
+import { startBot } from '@trader/bot'
 import { Scheduler } from './scheduler.js'
 import type { LiveConfig } from './config.js'
 
@@ -40,11 +41,29 @@ export function startLiveTrader(config: LiveConfig): LiveTraderHandle {
 
   const llmAdapter = new ClaudeAdapter({ apiKey: config.anthropicApiKey })
 
+  // Start Telegram bot if configured
+  const botHandle =
+    config.telegramBotToken && config.telegramChatId
+      ? startBot({
+          botToken: config.telegramBotToken,
+          chatId: config.telegramChatId,
+        })
+      : undefined
+
+  const { notifier, approvalManager } = botHandle ?? {}
+
   const cycle = new EvaluationCycle({
     pipeline,
     adapter: llmAdapter,
     engine,
     autoTradeLimit: config.autoTradeLimit,
+    notifier,
+    onApprovalNeeded: approvalManager
+      ? async decision => {
+          const result = await approvalManager.requestApproval(decision)
+          return result === 'approved'
+        }
+      : undefined,
   })
 
   const prisma = getPrismaClient()
@@ -87,7 +106,13 @@ export function startLiveTrader(config: LiveConfig): LiveTraderHandle {
 
   console.log(
     `[LiveTrader] Started. paper=${config.paper}, coins=${config.coins.join(',')}, cron="${config.cronExpression}"`,
+    botHandle ? '| Telegram bot active' : '| Telegram bot disabled',
   )
 
-  return { stop: () => scheduler.stop() }
+  return {
+    stop: () => {
+      scheduler.stop()
+      botHandle?.stop()
+    },
+  }
 }
