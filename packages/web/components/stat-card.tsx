@@ -1,3 +1,5 @@
+'use client'
+
 interface StatCardProps {
   label: string
   labelSimple?: string
