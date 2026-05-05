@@ -8,8 +8,8 @@ export function calculateStats(
   const totalPnl = trades.reduce((sum, t) => sum + (t.pnl ?? 0), 0)
 
   const closedTrades = trades.filter(t => t.closedAt !== undefined)
-  const winningTrades = trades.filter(t => (t.pnl ?? 0) > 0)
-  const winRate = trades.length === 0 ? 0 : winningTrades.length / trades.length
+  const winningTrades = closedTrades.filter(t => (t.pnl ?? 0) > 0)
+  const winRate = closedTrades.length === 0 ? 0 : winningTrades.length / closedTrades.length
 
   const maxDrawdown = computeMaxDrawdown(pnlCurve)
 
@@ -19,7 +19,7 @@ export function calculateStats(
       : closedTrades.reduce((sum, t) => sum + (t.closedAt!.getTime() - t.openedAt.getTime()), 0) /
         closedTrades.length
 
-  const sharpeRatio = computeSharpe(pnlCurve, initialCapital)
+  const sharpeRatio = computeSharpe(pnlCurve)
 
   return {
     totalPnl,
@@ -42,7 +42,7 @@ function computeMaxDrawdown(curve: PnlPoint[]): number {
   return maxDD
 }
 
-function computeSharpe(curve: PnlPoint[], initialCapital: number): number {
+function computeSharpe(curve: PnlPoint[]): number {
   if (curve.length < 2) return 0
   const returns: number[] = []
   for (let i = 1; i < curve.length; i++) {
@@ -50,9 +50,9 @@ function computeSharpe(curve: PnlPoint[], initialCapital: number): number {
     if (prev === 0) continue
     returns.push((curve[i].capital - prev) / prev)
   }
-  if (returns.length === 0) return 0
+  if (returns.length < 2) return 0
   const mean = returns.reduce((a, b) => a + b, 0) / returns.length
-  const variance = returns.reduce((a, b) => a + (b - mean) ** 2, 0) / returns.length
+  const variance = returns.reduce((a, b) => a + (b - mean) ** 2, 0) / (returns.length - 1)
   const stdDev = Math.sqrt(variance)
   if (stdDev === 0) return 0
   return (mean / stdDev) * Math.sqrt(252)
