@@ -73,15 +73,15 @@ export default function BacktestPage() {
 
 function BacktestResults({ result }: { result: BacktestResult }) {
   const { stats, pnlCurve } = result
-  const pnlVariant = stats.totalPnl >= 0 ? 'positive' : 'negative'
+  const pnlVariant = stats.totalPnl >= 0 ? 'pos' : 'neg'
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        <StatCard label="Total P&L" value={formatUsd(stats.totalPnl)} variant={pnlVariant} />
+        <StatCard label="Total P&L" value={formatUsd(stats.totalPnl)} colorVariant={pnlVariant} />
         <StatCard label="Win Rate" value={formatPct(stats.winRate * 100)} />
         <StatCard label="Total Trades" value={String(stats.totalTrades)} />
-        <StatCard label="Max Drawdown" value={formatPct(stats.maxDrawdown * 100)} variant="negative" />
+        <StatCard label="Max Drawdown" value={formatPct(stats.maxDrawdown * 100)} colorVariant="neg" />
         <StatCard label="Sharpe Ratio" value={stats.sharpeRatio.toFixed(2)} />
         <StatCard label="Avg Hold Time" value={formatDuration(stats.avgHoldTimeMs)} />
       </div>
