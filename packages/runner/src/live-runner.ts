@@ -1,7 +1,9 @@
+import { randomUUID } from 'crypto'
 import ccxt from 'ccxt'
 import { ClaudeAdapter, EvaluationCycle } from '@trader/llm'
 import { TradingEngine, CcxtExchangeAdapter } from '@trader/core'
 import { Pipeline, BinanceSource } from '@trader/data'
+import { getPrismaClient, TradeRepository, DecisionRepository } from '@trader/db'
 import { Scheduler } from './scheduler.js'
 import type { LiveConfig } from './config.js'
 
@@ -45,7 +47,42 @@ export function startLiveTrader(config: LiveConfig): LiveTraderHandle {
     autoTradeLimit: config.autoTradeLimit,
   })
 
-  const scheduler = new Scheduler(cycle, config.cronExpression)
+  const prisma = getPrismaClient()
+  const tradeRepo = new TradeRepository(prisma)
+  const decisionRepo = new DecisionRepository(prisma)
+
+  const persistingCycle = {
+    run: async () => {
+      const result = await cycle.run()
+
+      const decisionId = await decisionRepo.saveDecision(result.decision).catch(err => {
+        console.error('[LiveTrader] Failed to persist decision:', err)
+        return null
+      })
+
+      if (result.executed && result.decision.action === 'buy' && decisionId) {
+        const position = engine.getPositions().find(p => p.coin === result.decision.coin)
+        const trade = {
+          id: randomUUID(),
+          coin: result.decision.coin,
+          side: 'buy' as const,
+          size: result.decision.size,
+          entryPrice: position?.entryPrice ?? 0,
+          openedAt: new Date(),
+          reasoning: result.decision.reasoning,
+        }
+        await tradeRepo.saveTrade(trade, config.paper ? 'paper' : 'live').catch(err => {
+          console.error('[LiveTrader] Failed to persist trade:', err)
+        })
+        await decisionRepo.linkDecisionToTrade(decisionId, trade.id).catch(err => {
+          console.error('[LiveTrader] Failed to link decision to trade:', err)
+        })
+      }
+
+      return result
+    },
+  }
+  const scheduler = new Scheduler(persistingCycle, config.cronExpression)
   scheduler.start()
 
   console.log(

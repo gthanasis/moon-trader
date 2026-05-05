@@ -18,6 +18,7 @@
   "dependencies": {
     "@trader/core": "workspace:*",
     "@trader/data": "workspace:*",
+    "@trader/db": "workspace:*",
     "@trader/llm": "workspace:*",
     "@trader/shared": "workspace:*",
     "ccxt": "^4.0.0",
