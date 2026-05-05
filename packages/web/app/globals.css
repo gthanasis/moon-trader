@@ -1,3 +1,41 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --bg:      #09090f;
+  --surface: #111118;
+  --sf2:     #18181f;
+  --border:  #1e1e2c;
+  --fg:      #ddddf0;
+  --muted:   #50506a;
+  --accent:  #00e5a0;
+  --pos:     #10c97a;
+  --neg:     #f05050;
+  --warn:    #e8a020;
+  --info:    #6090f0;
+  --r:       5px;
+  --sidebar: 184px;
+}
+
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+* {
+  box-sizing: border-box;
+  border-color: var(--border);
+}
+
+.font-mono, [class*="tabular"] {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Expert / Simple toggle */
+.nb { display: none; }
+body.noob .xp { display: none; }
+body.noob .nb { display: revert; }
