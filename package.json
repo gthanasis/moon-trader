@@ -1,7 +1,9 @@
 {
   "name": "trader",
   "private": true,
+  "packageManager": "pnpm@10.33.2",
   "scripts": {
+    "predev": "docker compose up -d --wait",
     "dev": "turbo run dev",
     "build": "turbo run build",
     "test": "vitest run",
