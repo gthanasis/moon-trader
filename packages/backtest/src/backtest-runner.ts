@@ -88,7 +88,10 @@ export class BacktestRunner {
           openPositions.push({ trade })
         }
       } else if (decision.action === 'sell' && decision.size > 0) {
-        const posIndex = openPositions.findLastIndex(p => p.trade.coin === decision.coin)
+        let posIndex = -1
+        for (let i = openPositions.length - 1; i >= 0; i--) {
+          if (openPositions[i].trade.coin === decision.coin) { posIndex = i; break }
+        }
         if (posIndex !== -1) {
           const fillPrice = getFillPrice(ohlcv[decision.coin] ?? [], currentTime)
           if (fillPrice !== undefined) {

@@ -8,6 +8,7 @@ export default defineConfig({
       '@trader/data': resolve(__dirname, './packages/data/dist'),
       '@trader/shared': resolve(__dirname, './packages/shared/dist'),
       '@trader/llm': resolve(__dirname, './packages/llm/dist'),
+      '@trader/backtest': resolve(__dirname, './packages/backtest/dist'),
     },
   },
   test: {
