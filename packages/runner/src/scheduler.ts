@@ -7,6 +7,7 @@ interface CycleLike {
 
 export class Scheduler {
   private task: ScheduledTask | null = null
+  private isRunning = false
 
   constructor(
     private readonly cycle: CycleLike,
@@ -25,10 +26,14 @@ export class Scheduler {
   }
 
   private async tick(): Promise<void> {
+    if (this.isRunning) return
+    this.isRunning = true
     try {
       await this.cycle.run()
     } catch (err) {
       console.error('[Scheduler] Cycle error:', err)
+    } finally {
+      this.isRunning = false
     }
   }
 }

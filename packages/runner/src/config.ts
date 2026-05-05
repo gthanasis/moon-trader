@@ -18,11 +18,11 @@ export function loadConfig(): LiveConfig {
     return val
   }
 
-  function parseNumber(key: string, defaultValue: number): number {
+  function parseNumber(key: string, defaultValue: number, minValue = 0): number {
     const raw = process.env[key]
     if (raw === undefined) return defaultValue
     const val = Number(raw)
-    if (isNaN(val)) throw new Error(`Invalid numeric value for ${key}: "${raw}"`)
+    if (isNaN(val) || val <= minValue) throw new Error(`${key} must be a number greater than ${minValue}, got "${raw}"`)
     return val
   }
 
@@ -30,11 +30,11 @@ export function loadConfig(): LiveConfig {
     binanceApiKey: required('BINANCE_API_KEY'),
     binanceSecret: required('BINANCE_SECRET'),
     anthropicApiKey: required('ANTHROPIC_API_KEY'),
-    totalCapital: parseNumber('TOTAL_CAPITAL', 1000),
-    autoTradeLimit: parseNumber('AUTO_TRADE_LIMIT', 50),
+    totalCapital: parseNumber('TOTAL_CAPITAL', 1000, 0),
+    autoTradeLimit: parseNumber('AUTO_TRADE_LIMIT', 50, 0),
     coins: (process.env['COINS'] ?? 'BTC/USDT,ETH/USDT').split(','),
     timeframe: process.env['TIMEFRAME'] ?? '15m',
-    ohlcvLimit: parseNumber('OHLCV_LIMIT', 100),
+    ohlcvLimit: parseNumber('OHLCV_LIMIT', 100, 0),
     cronExpression: process.env['CRON_EXPRESSION'] ?? '*/15 * * * *',
     paper: process.env['PAPER'] !== 'false',
   }

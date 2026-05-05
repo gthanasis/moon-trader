@@ -88,6 +88,10 @@ export class TradingEngine {
     return { executed: false, reason: 'unknown action' }
   }
 
+  updatePositionPrice(coin: string, price: number): void {
+    this.positions.updatePrice(coin, price)
+  }
+
   getPositions(): Position[] {
     return this.positions.getAll()
   }

@@ -86,4 +86,16 @@ describe('loadConfig', () => {
       expect(config.paper).toBe(false)
     })
   })
+
+  it('throws when TOTAL_CAPITAL is not a number', () => {
+    withEnv({ ...requiredEnv, TOTAL_CAPITAL: 'abc' }, () => {
+      expect(() => loadConfig()).toThrow('TOTAL_CAPITAL')
+    })
+  })
+
+  it('throws when TOTAL_CAPITAL is zero', () => {
+    withEnv({ ...requiredEnv, TOTAL_CAPITAL: '0' }, () => {
+      expect(() => loadConfig()).toThrow('TOTAL_CAPITAL')
+    })
+  })
 })

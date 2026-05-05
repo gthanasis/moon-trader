@@ -28,4 +28,21 @@ describe('Scheduler', () => {
     scheduler.stop()
     expect(scheduler['task']).toBeNull()
   })
+
+  it('skips a tick that fires while previous cycle is still running', async () => {
+    let resolveCycle!: () => void
+    const run = vi.fn(() => new Promise<void>(resolve => { resolveCycle = resolve }))
+    const scheduler = new Scheduler({ run }, '* * * * *')
+
+    // Start first tick (does not finish)
+    const first = scheduler['tick']()
+    // Second tick fires while first is still running
+    await scheduler['tick']()
+
+    expect(run).toHaveBeenCalledOnce()
+
+    // Let first finish
+    resolveCycle()
+    await first
+  })
 })

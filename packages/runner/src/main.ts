@@ -9,3 +9,9 @@ process.on('SIGINT', () => {
   handle.stop()
   process.exit(0)
 })
+
+process.on('SIGTERM', () => {
+  console.log('[LiveTrader] SIGTERM received, shutting down...')
+  handle.stop()
+  process.exit(0)
+})

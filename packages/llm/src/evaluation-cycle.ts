@@ -7,6 +7,7 @@ interface PipelineLike {
 
 interface EngineLike {
   execute(decision: LLMDecision): Promise<{ executed: boolean; reason?: string }>
+  updatePositionPrice(coin: string, price: number): void
   getPositions(): Position[]
   getOpenOrders(): Order[]
   availableCapital(): number
@@ -43,6 +44,14 @@ export class EvaluationCycle {
       availableCapital: engine.availableCapital(),
       recentTrades: [],
       openOrders: engine.getOpenOrders(),
+    }
+
+    // Update position prices from latest candle closes
+    for (const [coin, candles] of Object.entries(snapshot.ohlcv)) {
+      const lastCandle = candles[candles.length - 1]
+      if (lastCandle) {
+        engine.updatePositionPrice(coin, lastCandle.close)
+      }
     }
 
     const decision = await adapter.decide(context)
