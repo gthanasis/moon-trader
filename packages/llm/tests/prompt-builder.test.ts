@@ -103,4 +103,27 @@ describe('buildPrompt', () => {
     const { user } = buildPrompt(context)
     expect(user).toContain('ETH/USDT')
   })
+
+  it('includes ohlcv price data when available', () => {
+    const context: TradingContext = {
+      ...emptyContext,
+      snapshot: {
+        timestamp: new Date(),
+        signals: [],
+        ohlcv: {
+          'BTC/USDT': [
+            { timestamp: new Date('2024-01-01T00:00:00Z'), open: 50000, high: 51000, low: 49500, close: 50500, volume: 1200 },
+          ],
+        },
+      },
+    }
+    const { user } = buildPrompt(context)
+    expect(user).toContain('BTC/USDT')
+    expect(user).toContain('50000')
+  })
+
+  it('shows no price data message when ohlcv is empty', () => {
+    const { user } = buildPrompt(emptyContext)
+    expect(user).toContain('No price data')
+  })
 })

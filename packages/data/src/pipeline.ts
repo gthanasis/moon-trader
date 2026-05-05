@@ -1,37 +1,43 @@
-import type { WorldSnapshot, Signal } from '@trader/shared'
+import type { WorldSnapshot, Signal, Candle } from '@trader/shared'
 import type { DataSource } from './sources/base.js'
+import type { OhlcvSource } from './sources/ohlcv-base.js'
 
 interface PipelineConfig {
   sources: DataSource[]
+  ohlcvSource?: OhlcvSource
+  coins?: string[]
+  timeframe?: string
+  ohlcvLimit?: number
 }
 
 export class Pipeline {
-  private readonly sources: DataSource[]
+  private readonly config: PipelineConfig
 
   constructor(config: PipelineConfig) {
-    this.sources = config.sources
+    this.config = config
   }
 
   async fetch(): Promise<WorldSnapshot> {
-    const results = await Promise.allSettled(
-      this.sources.map(source => source.fetch())
-    )
+    const { sources, ohlcvSource, coins, timeframe = '15m', ohlcvLimit = 100 } = this.config
 
-    const signals: Signal[] = results
+    const [signalResults, ohlcv] = await Promise.all([
+      Promise.allSettled(sources.map(source => source.fetch())),
+      ohlcvSource && coins?.length
+        ? ohlcvSource.fetchOhlcv(coins, timeframe, ohlcvLimit).catch(() => ({} as Record<string, Candle[]>))
+        : Promise.resolve({} as Record<string, Candle[]>),
+    ])
+
+    const signals: Signal[] = signalResults
       .filter((r): r is PromiseFulfilledResult<Signal[]> => r.status === 'fulfilled')
       .flatMap(r => r.value)
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
 
-    return {
-      timestamp: new Date(),
-      signals,
-      ohlcv: {},
-    }
+    return { timestamp: new Date(), signals, ohlcv }
   }
 
   async fetchHistorical(from: Date, to: Date): Promise<WorldSnapshot> {
     const results = await Promise.allSettled(
-      this.sources.map(source => source.fetchHistorical(from, to))
+      this.config.sources.map(source => source.fetchHistorical(from, to))
     )
 
     const signals: Signal[] = results
@@ -39,10 +45,6 @@ export class Pipeline {
       .flatMap(r => r.value)
       .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
 
-    return {
-      timestamp: to,
-      signals,
-      ohlcv: {},
-    }
+    return { timestamp: to, signals, ohlcv: {} }
   }
 }

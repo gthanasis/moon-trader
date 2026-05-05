@@ -23,6 +23,18 @@ Use the make_trading_decision tool to submit exactly one decision per analysis c
         })
         .join('\n')
 
+  const ohlcvLines = Object.keys(context.snapshot.ohlcv).length === 0
+    ? 'No price data available'
+    : Object.entries(context.snapshot.ohlcv)
+        .map(([coin, candles]) => {
+          const recent = candles.slice(-3)
+          const rows = recent
+            .map(c => `  ${c.timestamp.toISOString()} O:${c.open} H:${c.high} L:${c.low} C:${c.close} V:${c.volume.toFixed(0)}`)
+            .join('\n')
+          return `${coin} (last ${recent.length}):\n${rows}`
+        })
+        .join('\n\n')
+
   const signalLines = context.snapshot.signals.length === 0
     ? 'No signals available'
     : context.snapshot.signals
@@ -48,6 +60,9 @@ Available capital: $${context.availableCapital.toFixed(2)}
 
 ## Open Positions
 ${positionLines}
+
+## Price Data (recent candles)
+${ohlcvLines}
 
 ## Recent Signals (most recent first)
 ${signalLines}
