@@ -60,4 +60,39 @@ describe('CapitalGuard', () => {
     expect(() => new CapitalGuard({ totalCapital: 0 })).toThrow('Total capital must be positive')
     expect(() => new CapitalGuard({ totalCapital: -500 })).toThrow('Total capital must be positive')
   })
+
+  describe('releaseWithProceeds', () => {
+    it('reduces available capital after a losing trade', () => {
+      guard.reserve(200)
+      guard.releaseWithProceeds(200, 160) // sold at a loss: only got $160 back
+      expect(guard.availableCapital()).toBe(960) // 1000 - 40 loss
+    })
+
+    it('increases available capital after a winning trade', () => {
+      guard.reserve(200)
+      guard.releaseWithProceeds(200, 240) // sold at a gain: got $240 back
+      expect(guard.availableCapital()).toBe(1040) // 1000 + 40 gain
+    })
+
+    it('leaves capital unchanged after a breakeven trade', () => {
+      guard.reserve(200)
+      guard.releaseWithProceeds(200, 200)
+      expect(guard.availableCapital()).toBe(1000)
+    })
+
+    it('accumulates realised P&L across multiple trades', () => {
+      guard.reserve(100)
+      guard.releaseWithProceeds(100, 80)  // -20
+      guard.reserve(100)
+      guard.releaseWithProceeds(100, 130) // +30
+      expect(guard.availableCapital()).toBe(1010) // net +10
+    })
+
+    it('canTrade reflects reduced capital after a loss', () => {
+      guard.reserve(200)
+      guard.releaseWithProceeds(200, 100) // -100 loss
+      expect(guard.canTrade(950)).toBe(false) // only 900 left
+      expect(guard.canTrade(900)).toBe(true)
+    })
+  })
 })

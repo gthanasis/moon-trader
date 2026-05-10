@@ -56,14 +56,35 @@ describe('TradingEngine', () => {
   })
 
   it('executes a sell and closes position', async () => {
+    engine.updatePositionPrice('BTC/USDT', 50000)
     await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy' })
-
-    const sell: LLMDecision = { action: 'sell', coin: 'BTC/USDT', size: 200, confidence: 0.8, reasoning: 'sell' }
-    const result = await engine.execute(sell)
+    const result = await engine.execute({ action: 'sell', coin: 'BTC/USDT', size: 200, confidence: 0.8, reasoning: 'sell' })
 
     expect(result.executed).toBe(true)
     expect(engine.getPositions()).toHaveLength(0)
-    expect(engine.availableCapital()).toBe(1000)
+  })
+
+  it('reduces available capital after a losing paper sell', async () => {
+    engine.updatePositionPrice('BTC/USDT', 50000)
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy' })
+
+    // price drops to 40000 — a 20% loss on the position
+    engine.updatePositionPrice('BTC/USDT', 40000)
+    await engine.execute({ action: 'sell', coin: 'BTC/USDT', size: 200, confidence: 0.8, reasoning: 'sell' })
+
+    // bought 200/50000 = 0.004 BTC, sold at 40000 → proceeds = 0.004 * 40000 = 160
+    expect(engine.availableCapital()).toBeCloseTo(960, 0)
+  })
+
+  it('increases available capital after a winning paper sell', async () => {
+    engine.updatePositionPrice('BTC/USDT', 50000)
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy' })
+
+    engine.updatePositionPrice('BTC/USDT', 60000)
+    await engine.execute({ action: 'sell', coin: 'BTC/USDT', size: 200, confidence: 0.8, reasoning: 'sell' })
+
+    // bought 0.004 BTC at 50000, sold at 60000 → proceeds = 0.004 * 60000 = 240
+    expect(engine.availableCapital()).toBeCloseTo(1040, 0)
   })
 })
 

@@ -20,6 +20,7 @@ export class TradingEngine {
   private readonly guard: CapitalGuard
   private readonly positions: PositionTracker
   private readonly orders: OrderManager
+  private readonly currentPrices = new Map<string, number>()
 
   constructor(config: TradingEngineConfig) {
     this.guard = new CapitalGuard({ totalCapital: config.totalCapital })
@@ -44,7 +45,7 @@ export class TradingEngine {
         coin: decision.coin,
         side: 'buy',
         size: decision.size,
-        price: undefined,
+        price: this.currentPrices.get(decision.coin),
       })
 
       if (order.status === 'filled') {
@@ -78,8 +79,11 @@ export class TradingEngine {
       })
 
       if (order.status === 'filled') {
+        const proceeds = position.entryPrice > 0
+          ? (position.size / position.entryPrice) * (order.fillPrice ?? position.currentPrice)
+          : decision.size
         this.positions.close(decision.coin)
-        this.guard.release(decision.size)
+        this.guard.releaseWithProceeds(position.size, proceeds)
       }
 
       return { executed: true, order }
@@ -89,7 +93,25 @@ export class TradingEngine {
   }
 
   updatePositionPrice(coin: string, price: number): void {
+    this.currentPrices.set(coin, price)
     this.positions.updatePrice(coin, price)
+  }
+
+  async checkStopLosses(): Promise<void> {
+    for (const position of this.positions.getAll()) {
+      if (position.stopLoss === undefined) continue
+      if (position.currentPrice > position.stopLoss) continue
+      const order = await this.orders.place({
+        coin: position.coin,
+        side: 'sell',
+        size: position.size,
+        price: position.currentPrice,
+      })
+      if (order.status === 'filled') {
+        this.positions.close(position.coin)
+        this.guard.release(position.size)
+      }
+    }
   }
 
   getPositions(): Position[] {
