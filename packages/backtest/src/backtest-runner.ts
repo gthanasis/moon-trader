@@ -192,12 +192,13 @@ class SimulatedEngine implements EngineLike {
         continue
       }
 
-      // Trailing stop: ratchet stopLoss up when candle high makes a new HWM.
+      // Trailing stop: ratchet using candle close to match live (which sees close-price updates).
+      // Using high would be optimistic — live can't act on an intra-bar wick it never observed.
       if (pos.stopLoss !== undefined && candle) {
         const hwm = this.highWaterMarks.get(pos.coin) ?? pos.entryPrice
-        if (candle.high > hwm) {
-          this.highWaterMarks.set(pos.coin, candle.high)
-          const trailedStop = candle.high * (1 - TRAIL_PCT)
+        if (candle.close > hwm) {
+          this.highWaterMarks.set(pos.coin, candle.close)
+          const trailedStop = candle.close * (1 - TRAIL_PCT)
           if (trailedStop > pos.stopLoss) pos.stopLoss = trailedStop
         }
       }
