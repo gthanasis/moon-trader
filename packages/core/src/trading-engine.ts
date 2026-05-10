@@ -34,6 +34,10 @@ export class TradingEngine {
     }
 
     if (decision.action === 'buy') {
+      if (this.positions.get(decision.coin)) {
+        return { executed: false, reason: `Position already open for ${decision.coin}` }
+      }
+
       if (!this.guard.canTrade(decision.size)) {
         return {
           executed: false,

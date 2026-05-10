@@ -76,6 +76,27 @@ describe('TradingEngine', () => {
     expect(engine.availableCapital()).toBeCloseTo(960, 0)
   })
 
+  it('rejects a buy when a position for that coin is already open', async () => {
+    engine.updatePositionPrice('BTC/USDT', 50000)
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'first buy' })
+
+    const second = await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 100, confidence: 0.9, reasoning: 'second buy' })
+
+    expect(second.executed).toBe(false)
+    expect(second.reason).toMatch(/position already open/i)
+    expect(engine.getPositions()).toHaveLength(1)
+  })
+
+  it('allows buys on different coins simultaneously', async () => {
+    engine.updatePositionPrice('BTC/USDT', 50000)
+    engine.updatePositionPrice('ETH/USDT', 3000)
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 100, confidence: 0.9, reasoning: 'btc' })
+    const eth = await engine.execute({ action: 'buy', coin: 'ETH/USDT', size: 100, confidence: 0.9, reasoning: 'eth' })
+
+    expect(eth.executed).toBe(true)
+    expect(engine.getPositions()).toHaveLength(2)
+  })
+
   it('increases available capital after a winning paper sell', async () => {
     engine.updatePositionPrice('BTC/USDT', 50000)
     await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy' })
