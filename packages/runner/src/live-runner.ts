@@ -1,9 +1,9 @@
 import { randomUUID } from 'crypto'
 import ccxt from 'ccxt'
-import { ClaudeAdapter, EvaluationCycle } from '@trader/llm'
+import { ClaudeAdapter, OpenAIAdapter, EvaluationCycle } from '@trader/llm'
 import { TradingEngine, CcxtExchangeAdapter } from '@trader/core'
-import { Pipeline, BinanceSource } from '@trader/data'
-import { getPrismaClient, TradeRepository, DecisionRepository } from '@trader/db'
+import { Pipeline, BinanceSource, FearAndGreedSource, RssNewsSource } from '@trader/data'
+import { getPrismaClient, TradeRepository, DecisionRepository, SignalRepository, CandleRepository } from '@trader/db'
 import { startBot } from '@trader/bot'
 import { Scheduler } from './scheduler.js'
 import type { LiveConfig } from './config.js'
@@ -23,13 +23,43 @@ export function startLiveTrader(config: LiveConfig): LiveTraderHandle {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const binanceSource = new BinanceSource(binanceExchange as any)
 
-  const pipeline = new Pipeline({
-    sources: [],
+  const sources = [
+    new FearAndGreedSource(),
+    new RssNewsSource(),
+  ]
+
+  const basePipeline = new Pipeline({
+    sources,
     ohlcvSource: binanceSource,
     coins: config.coins,
     timeframe: config.timeframe,
     ohlcvLimit: config.ohlcvLimit,
   })
+
+  const prisma = getPrismaClient()
+  const tradeRepo = new TradeRepository(prisma)
+  const decisionRepo = new DecisionRepository(prisma)
+  const signalRepo = new SignalRepository(prisma)
+  const candleRepo = new CandleRepository(prisma)
+
+  const pipeline = {
+    fetch: async () => {
+      const snapshot = await basePipeline.fetch()
+      if (snapshot.signals.length > 0) {
+        await signalRepo.saveSignals(snapshot.signals).catch(err =>
+          console.error('[LiveTrader] Failed to persist signals:', err)
+        )
+      }
+      if (Object.keys(snapshot.ohlcv).length > 0) {
+        await Promise.all(
+          Object.entries(snapshot.ohlcv).map(([coin, candles]) =>
+            candleRepo.saveCandles(coin, config.timeframe, candles)
+          )
+        ).catch(err => console.error('[LiveTrader] Failed to persist candles:', err))
+      }
+      return snapshot
+    },
+  }
 
   const exchangeAdapter = config.paper ? undefined : new CcxtExchangeAdapter(binanceExchange)
 
@@ -37,9 +67,16 @@ export function startLiveTrader(config: LiveConfig): LiveTraderHandle {
     totalCapital: config.totalCapital,
     paper: config.paper,
     exchange: exchangeAdapter,
+    maxPositions: config.maxPositions,
+    dailyLossLimitPct: config.dailyLossLimitPct,
+    feeRate: config.feeRate,
+    slippageBps: config.slippageBps,
   })
 
-  const llmAdapter = new ClaudeAdapter({ apiKey: config.anthropicApiKey })
+  const llmAdapter =
+    config.llmProvider === 'openai'
+      ? new OpenAIAdapter({ apiKey: config.llmApiKey })
+      : new ClaudeAdapter({ apiKey: config.llmApiKey })
 
   // Start Telegram bot if configured
   const botHandle =
@@ -57,6 +94,9 @@ export function startLiveTrader(config: LiveConfig): LiveTraderHandle {
     adapter: llmAdapter,
     engine,
     autoTradeLimit: config.autoTradeLimit,
+    riskPerTradePct: config.riskPerTradePct,
+    minConfidence: config.minConfidence,
+    getRecentTrades: () => tradeRepo.findRecentTrades(5),
     notifier,
     onApprovalNeeded: approvalManager
       ? async decision => {
@@ -66,13 +106,10 @@ export function startLiveTrader(config: LiveConfig): LiveTraderHandle {
       : undefined,
   })
 
-  const prisma = getPrismaClient()
-  const tradeRepo = new TradeRepository(prisma)
-  const decisionRepo = new DecisionRepository(prisma)
-
   const persistingCycle = {
     run: async () => {
       const result = await cycle.run()
+      console.log(`[Cycle] ${new Date().toISOString()} — ${result.decision.action.toUpperCase()} ${result.decision.coin} confidence=${result.decision.confidence.toFixed(2)} executed=${result.executed} ${result.reason ?? ''}`.trimEnd())
 
       const decisionId = await decisionRepo.saveDecision(result.decision).catch(err => {
         console.error('[LiveTrader] Failed to persist decision:', err)
