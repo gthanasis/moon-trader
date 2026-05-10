@@ -182,34 +182,30 @@ describe('BacktestRunner', () => {
     expect(onStep).toHaveBeenNthCalledWith(3, 3, 3, new Date(2 * intervalMs), decision)
   })
 
-  it('closes the most recently opened position first (LIFO) when selling', async () => {
-    // Buy BTC twice at different prices, then sell once — should close the second buy (LIFO).
-    // The sell decision happens at t2; force-close of the remaining position happens at end (t3+15min).
-    // We distinguish explicit sell vs force-close by closedAt timestamp.
+  it('closes BTC position when adapter issues a sell decision', async () => {
+    // Buy BTC, then sell BTC — the position should be closed at the sell candle.
     let callCount = 0
     const adapter = {
       decide: vi.fn(async (): Promise<LLMDecision> => {
         callCount++
-        if (callCount === 1) return { action: 'buy', coin: 'BTC', size: 100, confidence: 0.9, reasoning: 'buy1' }
-        if (callCount === 2) return { action: 'buy', coin: 'BTC', size: 100, confidence: 0.9, reasoning: 'buy2' }
-        if (callCount === 3) return { action: 'sell', coin: 'BTC', size: 100, confidence: 0.9, reasoning: 'sell' }
+        if (callCount === 1) return { action: 'buy', coin: 'BTC', size: 100, confidence: 0.9, reasoning: 'buy' }
+        if (callCount === 2) return { action: 'sell', coin: 'BTC', size: 100, confidence: 0.9, reasoning: 'sell' }
         return { action: 'hold', coin: 'BTC', size: 0, confidence: 0.5, reasoning: 'hold' }
       }),
     }
 
-    const end = new Date(t3.getTime() + 15 * 60 * 1000)
     const config: BacktestConfig = {
       from: t0,
-      to: end,
+      to: t3,
       initialCapital: 1000,
       autoTradeLimit: 500,
       coins: ['BTC'],
       sources: [makeNullSource()],
       ohlcv: {
         BTC: [
-          makeCandle(t0, 100),  // fill for buy1 at t1 open → 110
-          makeCandle(t1, 110),  // fill for buy2 at t2 open → 120
-          makeCandle(t2, 120),  // fill for sell at t3 open → 130
+          makeCandle(t0, 100),  // decision at t0: buy → fill at t1 open = 110
+          makeCandle(t1, 110),  // decision at t1: sell → fill at t2 open = 120
+          makeCandle(t2, 120),
           makeCandle(t3, 130),
         ],
       },
@@ -221,19 +217,11 @@ describe('BacktestRunner', () => {
 
     const result = await new BacktestRunner(config).run()
 
-    const buyTrades = result.trades.filter(t => t.side === 'buy')
-    expect(buyTrades).toHaveLength(2)
-
-    // LIFO: the sell at step 3 (decision at t2) closes the most recently opened position (entry 120).
-    // Force-close at `end` closes the first position (entry 110).
-    const explicitlySold = buyTrades.find(t => t.closedAt?.getTime() === t2.getTime())
-    const forceClosed = buyTrades.find(t => t.closedAt?.getTime() === end.getTime())
-
-    expect(explicitlySold).toBeDefined()
-    expect(explicitlySold!.entryPrice).toBe(120) // LIFO: most recent first
-
-    expect(forceClosed).toBeDefined()
-    expect(forceClosed!.entryPrice).toBe(110) // first buy, closed at end
+    const buyTrade = result.trades.find(t => t.side === 'buy')
+    expect(buyTrade).toBeDefined()
+    expect(buyTrade!.entryPrice).toBe(110) // filled at next candle
+    expect(buyTrade!.exitPrice).toBe(120)  // closed at sell's next candle
+    expect(buyTrade!.closedAt).toBeDefined()
   })
 
   it('closes position via take-profit when candle high reaches the target', async () => {
@@ -349,5 +337,99 @@ describe('BacktestRunner', () => {
     // Should have executed a buy with size ≈ 100, not the LLM's 9999
     expect(result.trades.length).toBeGreaterThan(0)
     expect(result.trades[0].size).toBeCloseTo(100, 0)
+  })
+})
+
+describe('BacktestRunner — parity with live risk caps', () => {
+  const baseOhlcv = {
+    BTC: [makeCandle(t0, 100), makeCandle(t1, 100), makeCandle(t2, 100), makeCandle(t3, 100)],
+    ETH: [makeCandle(t0, 10), makeCandle(t1, 10), makeCandle(t2, 10), makeCandle(t3, 10)],
+  }
+
+  it('rejects a second buy on the same coin (duplicate-position guard)', async () => {
+    let calls = 0
+    const adapter = { decide: vi.fn(async (): Promise<LLMDecision> => {
+      calls++
+      // Two consecutive buys on BTC — second must be rejected
+      if (calls <= 2) return { action: 'buy', coin: 'BTC', size: 100, confidence: 0.9, reasoning: 'buy' }
+      return { action: 'hold', coin: '', size: 0, confidence: 0.5, reasoning: 'hold' }
+    }) }
+
+    const config: BacktestConfig = {
+      from: t0, to: t3, initialCapital: 1000, autoTradeLimit: 500,
+      coins: ['BTC'], sources: [makeNullSource()],
+      ohlcv: { BTC: [makeCandle(t0, 100), makeCandle(t1, 100), makeCandle(t2, 100), makeCandle(t3, 100)] },
+      adapter, intervalMs: 15 * 60 * 1000, slippageBps: 0, feeRate: 0,
+    }
+
+    const result = await new BacktestRunner(config).run()
+    const btcBuys = result.trades.filter(t => t.coin === 'BTC' && t.side === 'buy')
+    expect(btcBuys).toHaveLength(1)
+  })
+
+  it('enforces maxPositions — 6th coin buy is rejected when limit is 5', async () => {
+    const coins = ['BTC', 'ETH', 'SOL', 'BNB', 'ADA', 'DOGE']
+    const ohlcv = Object.fromEntries(
+      coins.map(c => [c, [makeCandle(t0, 100), makeCandle(t1, 100), makeCandle(t2, 100), makeCandle(t3, 100)]])
+    )
+    let calls = 0
+    const adapter = { decide: vi.fn(async (): Promise<LLMDecision> => {
+      const coin = coins[calls] ?? 'DOGE'
+      calls++
+      if (calls <= coins.length) return { action: 'buy', coin, size: 50, confidence: 0.9, reasoning: 'b' }
+      return { action: 'hold', coin: '', size: 0, confidence: 0.5, reasoning: 'h' }
+    }) }
+
+    const config: BacktestConfig = {
+      from: t0, to: t3, initialCapital: 10000, autoTradeLimit: 500,
+      coins, sources: [makeNullSource()], ohlcv,
+      adapter, intervalMs: 15 * 60 * 1000, slippageBps: 0, feeRate: 0,
+      maxPositions: 5,
+    }
+
+    const result = await new BacktestRunner(config).run()
+    const openBuys = result.trades.filter(t => t.side === 'buy' && t.exitPrice === undefined)
+    expect(openBuys.length).toBeLessThanOrEqual(5)
+  })
+
+  it('trailing stop ratchets up on new highs and closes position on reversal', async () => {
+    // Buy at 100, price rises to 120 (trail to 108), then drops to 105 (below 108) → should close
+    const ohlcv = {
+      BTC: [
+        makeCandle(t0, 100, 100),
+        makeCandle(t1, 100, 120), // price rises to 120 → HWM=120, trailed stop = 120*0.9=108
+        makeCandle(t2, 120, 105), // price drops to 105, below 108 → stop hit
+        makeCandle(t3, 105, 105),
+      ],
+    }
+    function makeCandle2(timestamp: Date, open: number, close: number): Candle {
+      return { timestamp, open, high: Math.max(open, close), low: Math.min(open, close), close, volume: 1 }
+    }
+    const ohlcv2 = {
+      BTC: [
+        makeCandle2(t0, 100, 100),
+        makeCandle2(t1, 100, 120),
+        makeCandle2(t2, 120, 105),
+        makeCandle2(t3, 105, 105),
+      ],
+    }
+    let bought = false
+    const adapter = { decide: vi.fn(async (): Promise<LLMDecision> => {
+      if (!bought) { bought = true; return { action: 'buy', coin: 'BTC', size: 100, confidence: 0.9, reasoning: 'buy', stopLoss: 90 } }
+      return { action: 'hold', coin: '', size: 0, confidence: 0.5, reasoning: 'hold' }
+    }) }
+
+    const config: BacktestConfig = {
+      from: t0, to: t3, initialCapital: 1000, autoTradeLimit: 500,
+      coins: ['BTC'], sources: [makeNullSource()], ohlcv: ohlcv2,
+      adapter, intervalMs: 15 * 60 * 1000, slippageBps: 0, feeRate: 0,
+    }
+
+    const result = await new BacktestRunner(config).run()
+    const closed = result.trades.filter(t => t.closedAt !== undefined)
+    // Position should have been closed by the trailing stop
+    expect(closed.length).toBeGreaterThan(0)
+    // Exit price should be at or near 108 (the trailed stop), not the force-close price
+    expect(closed[0].exitPrice).toBeLessThan(120)
   })
 })

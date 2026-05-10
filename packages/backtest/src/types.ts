@@ -20,6 +20,8 @@ export interface BacktestConfig {
   riskPerTradePct?: number
   /** Minimum LLM confidence for a buy to execute. Default: 0.6. */
   minConfidence?: number
+  /** Maximum simultaneous open positions. Default: 5. */
+  maxPositions?: number
   onStep?: (step: number, total: number, timestamp: Date, decision: LLMDecision) => void | Promise<void>
 }
 

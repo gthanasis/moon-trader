@@ -61,11 +61,14 @@ class HistoricalPipeline implements PipelineLike {
  * Simulates exchange order execution for backtesting.
  * Implements EngineLike so EvaluationCycle drives the same decision loop as live trading.
  */
+const TRAIL_PCT = 0.10
+
 class SimulatedEngine implements EngineLike {
   private capital: number
   // Open positions (always side='buy'). Sells close LIFO.
   private openPositions: BacktestTrade[] = []
   private closedTrades: BacktestTrade[] = []
+  private readonly highWaterMarks = new Map<string, number>()
   readonly trades: BacktestTrade[] = []
   readonly pnlCurve: PnlPoint[] = []
   private currentTime: Date = new Date(0)
@@ -78,6 +81,7 @@ class SimulatedEngine implements EngineLike {
     private readonly intervalMs: number,
     private readonly feeRate: number,
     private readonly slippageBps: number,
+    private readonly maxPositions: number,
   ) {
     this.capital = initialCapital
   }
@@ -111,6 +115,12 @@ class SimulatedEngine implements EngineLike {
 
     if (decision.action === 'buy') {
       if (decision.size <= 0) return { executed: false, reason: 'invalid size' }
+      if (this.openPositions.some(p => p.coin === decision.coin)) {
+        return { executed: false, reason: `Position already open for ${decision.coin}` }
+      }
+      if (this.openPositions.length >= this.maxPositions) {
+        return { executed: false, reason: `Max positions reached (${this.maxPositions})` }
+      }
       if (this.capital < decision.size) return { executed: false, reason: 'insufficient capital' }
       const tradeSize = Math.min(decision.size, this.autoTradeLimit)
       const rawFill = getFillPrice(this.ohlcv[decision.coin] ?? [], this.currentTime, this.intervalMs)
@@ -130,6 +140,7 @@ class SimulatedEngine implements EngineLike {
         reasoning: decision.reasoning,
       }
       this.capital -= tradeSize + entryFee
+      this.highWaterMarks.set(decision.coin, fillPrice)
       this.trades.push(trade)
       this.openPositions.push(trade)
       return { executed: true, order: { fillPrice } }
@@ -164,6 +175,7 @@ class SimulatedEngine implements EngineLike {
     pos.fees += exitFee
     pos.pnl = proceeds - pos.size - pos.fees
     this.capital += proceeds - exitFee
+    this.highWaterMarks.delete(pos.coin)
     this.closedTrades.push(pos)
     this.openPositions.splice(posIndex, 1)
   }
@@ -178,6 +190,16 @@ class SimulatedEngine implements EngineLike {
       if (pos.takeProfit !== undefined && candle && candle.high >= pos.takeProfit) {
         this.closePosition(i, pos.takeProfit, this.currentTime)
         continue
+      }
+
+      // Trailing stop: ratchet stopLoss up when candle high makes a new HWM.
+      if (pos.stopLoss !== undefined && candle) {
+        const hwm = this.highWaterMarks.get(pos.coin) ?? pos.entryPrice
+        if (candle.high > hwm) {
+          this.highWaterMarks.set(pos.coin, candle.high)
+          const trailedStop = candle.high * (1 - TRAIL_PCT)
+          if (trailedStop > pos.stopLoss) pos.stopLoss = trailedStop
+        }
       }
 
       // Stop-loss: use candle low for intrabar detection; fill at stop price.
@@ -231,8 +253,10 @@ export class BacktestRunner {
     }
     allSignals.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
 
+    const maxPositions = this.config.maxPositions ?? 5
+
     const pipeline = new HistoricalPipeline(allSignals, ohlcv)
-    const engine = new SimulatedEngine(initialCapital, autoTradeLimit, coins, ohlcv, intervalMs, feeRate, slippageBps)
+    const engine = new SimulatedEngine(initialCapital, autoTradeLimit, coins, ohlcv, intervalMs, feeRate, slippageBps, maxPositions)
 
     // EvaluationCycle is the single decision loop shared with the live runner.
     // getRecentTrades wires the same context the live runner provides via DB.
