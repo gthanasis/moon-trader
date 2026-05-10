@@ -108,8 +108,8 @@ export class TradingEngine {
           console.error(`[TradingEngine] Invalid fill price for ${decision.coin}: ${order.fillPrice}`)
           return { executed: false, reason: `Invalid fill price for ${decision.coin}` }
         }
-        const buyFee = decision.size * this.feeRate
-        this.guard.reserve(decision.size + buyFee)
+        this.guard.reserve(decision.size)
+        this.guard.deductFee(decision.size * this.feeRate)
         this.baseQty.set(decision.coin, decision.size / order.fillPrice)
         this.positions.open({
           coin: decision.coin,

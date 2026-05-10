@@ -35,6 +35,11 @@ export class CapitalGuard {
     this.realisedPnl += proceeds - reserved
   }
 
+  /** Record an exchange fee without touching deployed capital (fee is a direct cost). */
+  deductFee(amount: number): void {
+    this.realisedPnl -= amount
+  }
+
   availableCapital(): number {
     return this.total + this.realisedPnl - this.deployed
   }

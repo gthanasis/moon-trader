@@ -95,4 +95,25 @@ describe('CapitalGuard', () => {
       expect(guard.canTrade(900)).toBe(true)
     })
   })
+
+  describe('deductFee', () => {
+    it('reduces available capital by the fee amount', () => {
+      guard.deductFee(0.5)
+      expect(guard.availableCapital()).toBeCloseTo(999.5, 5)
+    })
+
+    it('round-trip with fees: buy+sell at breakeven costs exactly 2 fees', () => {
+      // Simulate: buy $200 with 0.1% fee, sell at breakeven with 0.1% fee
+      const size = 200
+      const feeRate = 0.001
+      const buyFee = size * feeRate           // 0.2
+      const sellFee = size * feeRate          // 0.2 (breakeven → gross proceeds = size)
+      guard.reserve(size)
+      guard.deductFee(buyFee)
+      guard.releaseWithProceeds(size, size - sellFee) // net proceeds after sell fee
+      // deployed returns to 0; realisedPnl = -0.2 (sell fee); fee cost = -0.2 + -0.2 = -0.4
+      expect(guard.availableCapital()).toBeCloseTo(1000 - buyFee - sellFee, 5)
+      expect(guard.deployedCapital()).toBeCloseTo(0, 10)
+    })
+  })
 })
