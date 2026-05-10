@@ -22,6 +22,13 @@ export interface BacktestConfig {
   minConfidence?: number
   /** Maximum simultaneous open positions. Default: 5. */
   maxPositions?: number
+  /** Fraction of day-start equity that may be lost before new buys are blocked. Default: 0.05 (5%). */
+  dailyLossLimitPct?: number
+  /**
+   * Number of bars to skip at the start before the first LLM call, giving long-window indicators
+   * (EMA-50, ATR-14, RSI-14) time to warm up. Default: 0 (no skip). Set to 50 for production runs.
+   */
+  warmupBars?: number
   onStep?: (step: number, total: number, timestamp: Date, decision: LLMDecision) => void | Promise<void>
 }
 

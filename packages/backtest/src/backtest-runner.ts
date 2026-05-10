@@ -72,6 +72,8 @@ class SimulatedEngine implements EngineLike {
   readonly trades: BacktestTrade[] = []
   readonly pnlCurve: PnlPoint[] = []
   private currentTime: Date = new Date(0)
+  private dailyStartCapital: number
+  private currentUtcDay = -1
 
   constructor(
     initialCapital: number,
@@ -82,11 +84,30 @@ class SimulatedEngine implements EngineLike {
     private readonly feeRate: number,
     private readonly slippageBps: number,
     private readonly maxPositions: number,
+    private readonly dailyLossLimitPct: number,
   ) {
     this.capital = initialCapital
+    this.dailyStartCapital = initialCapital
   }
 
   setTime(t: Date) { this.currentTime = t }
+
+  private currentEquity(): number {
+    const ts = this.currentTime.getTime()
+    const openValue = this.openPositions.reduce((sum, p) => {
+      const price = lastCandleAtOrBefore(this.ohlcv[p.coin] ?? [], ts)?.close ?? p.entryPrice
+      return sum + (p.size / p.entryPrice) * price
+    }, 0)
+    return this.capital + openValue
+  }
+
+  private refreshDailyReset(): void {
+    const day = Math.floor(this.currentTime.getTime() / 86400000)
+    if (day !== this.currentUtcDay) {
+      this.dailyStartCapital = this.currentEquity()
+      this.currentUtcDay = day
+    }
+  }
 
   getClosedTrades(): BacktestTrade[] { return this.closedTrades }
 
@@ -115,11 +136,17 @@ class SimulatedEngine implements EngineLike {
 
     if (decision.action === 'buy') {
       if (decision.size <= 0) return { executed: false, reason: 'invalid size' }
+      this.refreshDailyReset()
       if (this.openPositions.some(p => p.coin === decision.coin)) {
         return { executed: false, reason: `Position already open for ${decision.coin}` }
       }
       if (this.openPositions.length >= this.maxPositions) {
         return { executed: false, reason: `Max positions reached (${this.maxPositions})` }
+      }
+      const dailyDrawdown = this.dailyStartCapital - this.currentEquity()
+      if (dailyDrawdown > this.dailyStartCapital * this.dailyLossLimitPct) {
+        const lossPct = (dailyDrawdown / this.dailyStartCapital * 100).toFixed(1)
+        return { executed: false, reason: `Daily loss limit hit: lost ${lossPct}% today` }
       }
       if (this.capital < decision.size) return { executed: false, reason: 'insufficient capital' }
       const tradeSize = Math.min(decision.size, this.autoTradeLimit)
@@ -255,9 +282,10 @@ export class BacktestRunner {
     allSignals.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
 
     const maxPositions = this.config.maxPositions ?? 5
+    const dailyLossLimitPct = this.config.dailyLossLimitPct ?? 0.05
 
     const pipeline = new HistoricalPipeline(allSignals, ohlcv)
-    const engine = new SimulatedEngine(initialCapital, autoTradeLimit, coins, ohlcv, intervalMs, feeRate, slippageBps, maxPositions)
+    const engine = new SimulatedEngine(initialCapital, autoTradeLimit, coins, ohlcv, intervalMs, feeRate, slippageBps, maxPositions, dailyLossLimitPct)
 
     // EvaluationCycle is the single decision loop shared with the live runner.
     // getRecentTrades wires the same context the live runner provides via DB.
@@ -271,9 +299,12 @@ export class BacktestRunner {
       getRecentTrades: () => Promise.resolve(engine.getClosedTrades().slice(-5).map(toTrade)),
     })
 
-    let current = from.getTime()
     const end = to.getTime()
-    const total = Math.ceil((end - from.getTime()) / intervalMs)
+    // Skip warmup bars so long-window indicators (EMA-50 etc.) are warm before the first LLM call.
+    // Default 0 (no warmup); set to 50 for production runs.
+    const warmupBars = this.config.warmupBars ?? 0
+    let current = from.getTime() + warmupBars * intervalMs
+    const total = Math.ceil((end - current) / intervalMs)
     let step = 1
 
     while (current < end) {

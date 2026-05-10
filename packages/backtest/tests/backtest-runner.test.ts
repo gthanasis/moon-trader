@@ -432,4 +432,36 @@ describe('BacktestRunner — parity with live risk caps', () => {
     // Exit price should be at or near 108 (the trailed stop), not the force-close price
     expect(closed[0].exitPrice).toBeLessThan(120)
   })
+
+  it('blocks a new buy when daily equity loss exceeds the configured limit', async () => {
+    // Capital=1000, dailyLossLimitPct=0.05 (5% = $50 loss limit).
+    // Step 1 (t0): buy BTC size=300 → fills at t1 open=100. capital=700, 3 BTC units at 100.
+    // Step 2 (t1): BTC close=70. Equity = 700 + 3*70 = 910. Loss = 1000-910 = 90 > 50 → BLOCK.
+    // { open:100, close:70 } means the bar wicked from 100 to 70; makeCandle(t1, 100, 70) gives that.
+    let calls = 0
+    const adapter = { decide: vi.fn(async (): Promise<LLMDecision> => {
+      calls++
+      if (calls === 1) return { action: 'buy', coin: 'BTC', size: 300, confidence: 0.9, reasoning: 'buy1' }
+      if (calls === 2) return { action: 'buy', coin: 'ETH', size: 50, confidence: 0.9, reasoning: 'buy2' }
+      return { action: 'hold', coin: '', size: 0, confidence: 0.5, reasoning: 'hold' }
+    }) }
+
+    const config: BacktestConfig = {
+      from: t0, to: t3, initialCapital: 1000, autoTradeLimit: 500,
+      coins: ['BTC', 'ETH'], sources: [makeNullSource()],
+      ohlcv: {
+        // t1 open=100 (fill price), close=70 (sharp drop within the bar)
+        BTC: [makeCandle(t0, 100), makeCandle(t1, 100, 70), makeCandle(t2, 70), makeCandle(t3, 70)],
+        ETH: [makeCandle(t0, 10), makeCandle(t1, 10), makeCandle(t2, 10), makeCandle(t3, 10)],
+      },
+      adapter, intervalMs: 15 * 60 * 1000, slippageBps: 0, feeRate: 0,
+      dailyLossLimitPct: 0.05,
+    }
+
+    const result = await new BacktestRunner(config).run()
+    // Only the first BTC buy should execute; second buy blocked by daily-loss guard
+    const buys = result.trades.filter(t => t.side === 'buy')
+    expect(buys).toHaveLength(1)
+    expect(buys[0].coin).toBe('BTC')
+  })
 })
