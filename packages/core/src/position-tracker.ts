@@ -38,6 +38,13 @@ export class PositionTracker {
     }
   }
 
+  updateStopLoss(coin: string, stopLoss: number): void {
+    const position = this.positions.get(coin)
+    if (position) {
+      this.positions.set(coin, { ...position, stopLoss })
+    }
+  }
+
   unrealizedPnl(coin: string): number {
     const position = this.positions.get(coin)
     if (!position) return 0

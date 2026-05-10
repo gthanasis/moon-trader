@@ -16,11 +16,15 @@ interface ExecuteResult {
   order?: Order
 }
 
+// Trailing stop: when price makes a new high, ratchet stopLoss up to this % below the peak.
+const TRAIL_PCT = 0.10
+
 export class TradingEngine {
   private readonly guard: CapitalGuard
   private readonly positions: PositionTracker
   private readonly orders: OrderManager
   private readonly currentPrices = new Map<string, number>()
+  private readonly highWaterMarks = new Map<string, number>()
 
   constructor(config: TradingEngineConfig) {
     this.guard = new CapitalGuard({ totalCapital: config.totalCapital })
@@ -107,17 +111,42 @@ export class TradingEngine {
 
   async checkStopLosses(): Promise<void> {
     for (const position of this.positions.getAll()) {
-      if (position.stopLoss === undefined) continue
-      if (position.currentPrice > position.stopLoss) continue
+      const price = position.currentPrice
+
+      // Update trailing stop: ratchet stopLoss up when price makes a new high.
+      if (position.stopLoss !== undefined) {
+        const hwm = this.highWaterMarks.get(position.coin) ?? position.entryPrice
+        if (price > hwm) {
+          this.highWaterMarks.set(position.coin, price)
+          const trailedStop = price * (1 - TRAIL_PCT)
+          if (trailedStop > position.stopLoss) {
+            this.positions.updateStopLoss(position.coin, trailedStop)
+          }
+        }
+      }
+
+      // Re-read position after potential stopLoss update.
+      const current = this.positions.get(position.coin)
+      if (!current) continue
+
+      const hitStop = current.stopLoss !== undefined && price <= current.stopLoss
+      const hitTakeProfit = current.takeProfit !== undefined && price >= current.takeProfit
+
+      if (!hitStop && !hitTakeProfit) continue
+
       const order = await this.orders.place({
-        coin: position.coin,
+        coin: current.coin,
         side: 'sell',
-        size: position.size,
-        price: position.currentPrice,
+        size: current.size,
+        price,
       })
       if (order.status === 'filled') {
-        this.positions.close(position.coin)
-        this.guard.release(position.size)
+        const proceeds = current.entryPrice > 0
+          ? (current.size / current.entryPrice) * (order.fillPrice ?? price)
+          : current.size
+        this.positions.close(current.coin)
+        this.highWaterMarks.delete(current.coin)
+        this.guard.releaseWithProceeds(current.size, proceeds)
       }
     }
   }

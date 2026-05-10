@@ -120,6 +120,65 @@ describe('TradingEngine', () => {
   })
 })
 
+describe('TradingEngine.checkStopLosses', () => {
+  let engine: TradingEngine
+
+  beforeEach(() => {
+    engine = new TradingEngine({ totalCapital: 1000, paper: true })
+  })
+
+  it('closes a position when current price hits the take-profit level', async () => {
+    engine.updatePositionPrice('BTC/USDT', 50000)
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy', takeProfit: 55000 })
+
+    engine.updatePositionPrice('BTC/USDT', 55000) // price reached take-profit
+    await engine.checkStopLosses()
+
+    expect(engine.getPositions()).toHaveLength(0)
+    expect(engine.availableCapital()).toBeGreaterThan(1000) // gain
+  })
+
+  it('does not close a position when price is below take-profit', async () => {
+    engine.updatePositionPrice('BTC/USDT', 50000)
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy', takeProfit: 55000 })
+
+    engine.updatePositionPrice('BTC/USDT', 54000) // not there yet
+    await engine.checkStopLosses()
+
+    expect(engine.getPositions()).toHaveLength(1)
+  })
+
+  it('raises stopLoss when price makes a new high (trailing stop)', async () => {
+    engine.updatePositionPrice('BTC/USDT', 50000)
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy', stopLoss: 48000 })
+
+    // price rises to 60000 — trailing stop should ratchet up
+    engine.updatePositionPrice('BTC/USDT', 60000)
+    await engine.checkStopLosses()
+
+    // position should still be open (price above any stop)
+    expect(engine.getPositions()).toHaveLength(1)
+    // stopLoss on the position should now be above original 48000
+    const pos = engine.getPositions()[0]
+    expect(pos.stopLoss).toBeGreaterThan(48000)
+  })
+
+  it('closes position when price falls back below the trailed stop', async () => {
+    engine.updatePositionPrice('BTC/USDT', 50000)
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy', stopLoss: 48000 })
+
+    // price rises to 60000 — 10% trailing stop ratchets stopLoss to 54000
+    engine.updatePositionPrice('BTC/USDT', 60000)
+    await engine.checkStopLosses()
+
+    // price falls to 53000, below the trailed stop of 54000
+    engine.updatePositionPrice('BTC/USDT', 53000)
+    await engine.checkStopLosses()
+
+    expect(engine.getPositions()).toHaveLength(0)
+  })
+})
+
 describe('TradingEngine live mode', () => {
   it('passes currentPrice to OrderManager when selling live', async () => {
     const sellSpy = vi.fn(async (): Promise<ExecutedOrder> => ({

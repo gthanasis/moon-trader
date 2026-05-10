@@ -1,18 +1,212 @@
-import type { Signal, TradingContext, Candle } from '@trader/shared'
+import type { Signal, TradingContext, Candle, Position, Order, Trade } from '@trader/shared'
+import type { LLMDecision } from '@trader/shared'
+import { EvaluationCycle } from '@trader/llm'
+import type { PipelineLike, EngineLike } from '@trader/llm'
 import { historicalSlice } from './historical-slice.js'
 import { getFillPrice } from './fill-simulator.js'
 import { calculateStats } from './stats-calculator.js'
 import type { BacktestConfig, BacktestResult, BacktestTrade, PnlPoint } from './types.js'
 
-interface OpenPosition {
-  trade: BacktestTrade
+// Binary search: largest candle with timestamp <= timestamp, or undefined.
+// Assumes candles are sorted ascending.
+function lastCandleAtOrBefore(candles: Candle[], timestamp: number): Candle | undefined {
+  let lo = 0, hi = candles.length - 1, result: Candle | undefined
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    if (candles[mid].timestamp.getTime() <= timestamp) {
+      result = candles[mid]
+      lo = mid + 1
+    } else {
+      hi = mid - 1
+    }
+  }
+  return result
 }
 
-function lastCandleAtOrBefore(candles: Candle[], timestamp: number): Candle | undefined {
-  for (let i = candles.length - 1; i >= 0; i--) {
-    if (candles[i].timestamp.getTime() <= timestamp) return candles[i]
+function toTrade(t: BacktestTrade): Trade {
+  return {
+    id: `${t.openedAt.toISOString()}_${t.coin}`,
+    coin: t.coin,
+    side: t.side,
+    size: t.size,
+    entryPrice: t.entryPrice,
+    exitPrice: t.exitPrice,
+    openedAt: t.openedAt,
+    closedAt: t.closedAt,
+    pnl: t.pnl,
+    reasoning: t.reasoning,
   }
-  return undefined
+}
+
+/**
+ * Wraps historicalSlice as a PipelineLike for EvaluationCycle.
+ * Backtest loop sets currentTime before each cycle.run() call.
+ */
+class HistoricalPipeline implements PipelineLike {
+  private currentTime: Date = new Date(0)
+
+  constructor(
+    private readonly allSignals: Signal[],
+    private readonly ohlcv: Record<string, Candle[]>,
+  ) {}
+
+  setTime(t: Date) { this.currentTime = t }
+
+  async fetch() {
+    return historicalSlice(this.allSignals, this.ohlcv, this.currentTime)
+  }
+}
+
+/**
+ * Simulates exchange order execution for backtesting.
+ * Implements EngineLike so EvaluationCycle drives the same decision loop as live trading.
+ */
+class SimulatedEngine implements EngineLike {
+  private capital: number
+  // Open positions (always side='buy'). Sells close LIFO.
+  private openPositions: BacktestTrade[] = []
+  private closedTrades: BacktestTrade[] = []
+  readonly trades: BacktestTrade[] = []
+  readonly pnlCurve: PnlPoint[] = []
+  private currentTime: Date = new Date(0)
+
+  constructor(
+    initialCapital: number,
+    private readonly autoTradeLimit: number,
+    private readonly coins: string[],
+    private readonly ohlcv: Record<string, Candle[]>,
+    private readonly intervalMs: number,
+    private readonly feeRate: number,
+    private readonly slippageBps: number,
+  ) {
+    this.capital = initialCapital
+  }
+
+  setTime(t: Date) { this.currentTime = t }
+
+  getClosedTrades(): BacktestTrade[] { return this.closedTrades }
+
+  getPositions(): Position[] {
+    const ts = this.currentTime.getTime()
+    return this.openPositions.map(p => ({
+      coin: p.coin,
+      size: p.size,
+      entryPrice: p.entryPrice,
+      currentPrice: lastCandleAtOrBefore(this.ohlcv[p.coin] ?? [], ts)?.close ?? p.entryPrice,
+      openedAt: p.openedAt,
+    }))
+  }
+
+  getOpenOrders(): Order[] { return [] }
+
+  availableCapital(): number { return this.capital }
+
+  // No-op: SimulatedEngine computes current price live from candles in getPositions().
+  updatePositionPrice(_coin: string, _price: number): void {}
+
+  async execute(decision: LLMDecision): Promise<{ executed: boolean; reason?: string; order?: { fillPrice?: number } }> {
+    if (!this.coins.includes(decision.coin)) {
+      return { executed: false, reason: 'unknown coin' }
+    }
+
+    if (decision.action === 'buy') {
+      if (decision.size <= 0) return { executed: false, reason: 'invalid size' }
+      if (this.capital < decision.size) return { executed: false, reason: 'insufficient capital' }
+      const tradeSize = Math.min(decision.size, this.autoTradeLimit)
+      const rawFill = getFillPrice(this.ohlcv[decision.coin] ?? [], this.currentTime, this.intervalMs)
+      if (rawFill === undefined) return { executed: false, reason: 'no fill price available' }
+      // Buys slip upward (we pay more than the quoted open).
+      const fillPrice = rawFill * (1 + this.slippageBps / 10000)
+      const entryFee = tradeSize * this.feeRate
+      const trade: BacktestTrade = {
+        coin: decision.coin,
+        side: 'buy',
+        size: tradeSize,
+        entryPrice: fillPrice,
+        openedAt: this.currentTime,
+        fees: entryFee,
+        stopLoss: decision.stopLoss,
+        takeProfit: decision.takeProfit,
+        reasoning: decision.reasoning,
+      }
+      this.capital -= tradeSize + entryFee
+      this.trades.push(trade)
+      this.openPositions.push(trade)
+      return { executed: true, order: { fillPrice } }
+    }
+
+    if (decision.action === 'sell') {
+      if (decision.size <= 0) return { executed: false, reason: 'invalid size' }
+      // LIFO: close the most recently opened position for this coin.
+      let posIndex = -1
+      for (let i = this.openPositions.length - 1; i >= 0; i--) {
+        if (this.openPositions[i].coin === decision.coin) { posIndex = i; break }
+      }
+      if (posIndex === -1) return { executed: false, reason: 'no open position' }
+      const rawFill = getFillPrice(this.ohlcv[decision.coin] ?? [], this.currentTime, this.intervalMs)
+      if (rawFill === undefined) return { executed: false, reason: 'no fill price available' }
+      this.closePosition(posIndex, rawFill, this.currentTime)
+      return { executed: true, order: { fillPrice: rawFill } }
+    }
+
+    return { executed: false, reason: 'hold' }
+  }
+
+  private closePosition(posIndex: number, rawFill: number, closeTime: Date): void {
+    const pos = this.openPositions[posIndex]
+    // Sells slip downward (we receive less than the quoted open).
+    const fillPrice = rawFill * (1 - this.slippageBps / 10000)
+    const units = pos.size / pos.entryPrice
+    const proceeds = units * fillPrice
+    const exitFee = proceeds * this.feeRate
+    pos.exitPrice = fillPrice
+    pos.closedAt = closeTime
+    pos.fees += exitFee
+    pos.pnl = proceeds - pos.size - pos.fees
+    this.capital += proceeds - exitFee
+    this.closedTrades.push(pos)
+    this.openPositions.splice(posIndex, 1)
+  }
+
+  async checkStopLosses(): Promise<void> {
+    const ts = this.currentTime.getTime()
+    for (let i = this.openPositions.length - 1; i >= 0; i--) {
+      const pos = this.openPositions[i]
+      const candle = lastCandleAtOrBefore(this.ohlcv[pos.coin] ?? [], ts)
+
+      // Take-profit: check candle high against target; fill at the target price.
+      if (pos.takeProfit !== undefined && candle && candle.high >= pos.takeProfit) {
+        this.closePosition(i, pos.takeProfit, this.currentTime)
+        continue
+      }
+
+      // Stop-loss: use candle low for intrabar detection; fill at stop price.
+      if (pos.stopLoss !== undefined) {
+        const low = candle?.low ?? pos.entryPrice
+        if (low <= pos.stopLoss) {
+          this.closePosition(i, pos.stopLoss, this.currentTime)
+        }
+      }
+    }
+  }
+
+  pushPnlPoint(timestamp: Date): void {
+    const ts = timestamp.getTime()
+    const openValue = this.openPositions.reduce((sum, p) => {
+      const price = lastCandleAtOrBefore(this.ohlcv[p.coin] ?? [], ts)?.close ?? p.entryPrice
+      return sum + (p.size / p.entryPrice) * price
+    }, 0)
+    this.pnlCurve.push({ timestamp, capital: this.capital + openValue })
+  }
+
+  forceCloseAll(endTime: Date): void {
+    for (let i = this.openPositions.length - 1; i >= 0; i--) {
+      const pos = this.openPositions[i]
+      const lastCandle = this.ohlcv[pos.coin]?.at(-1)
+      if (lastCandle) this.closePosition(i, lastCandle.close, endTime)
+    }
+    this.pnlCurve.push({ timestamp: endTime, capital: this.capital })
+  }
 }
 
 export class BacktestRunner {
@@ -21,8 +215,10 @@ export class BacktestRunner {
   async run(): Promise<BacktestResult> {
     const { from, to, initialCapital, autoTradeLimit, coins, sources, ohlcv, adapter } = this.config
     const intervalMs = this.config.intervalMs ?? 15 * 60 * 1000
+    const feeRate = this.config.feeRate ?? 0.001
+    const slippageBps = this.config.slippageBps ?? 5
 
-    // fetch all historical signals upfront
+    // Fetch all historical signals upfront and sort for binary search in historicalSlice.
     const allSignals: Signal[] = []
     const sourceResults = await Promise.allSettled(
       sources.map(async source => {
@@ -30,117 +226,51 @@ export class BacktestRunner {
         allSignals.push(...signals)
       }),
     )
-    for (const result of sourceResults) {
-      if (result.status === 'rejected') {
-        console.warn('[BacktestRunner] Signal source failed:', result.reason)
-      }
+    for (const r of sourceResults) {
+      if (r.status === 'rejected') console.warn('[BacktestRunner] Signal source failed:', r.reason)
     }
+    allSignals.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
 
-    const trades: BacktestTrade[] = []
-    const pnlCurve: PnlPoint[] = []
-    const openPositions: OpenPosition[] = []
-    let capital = initialCapital
+    const pipeline = new HistoricalPipeline(allSignals, ohlcv)
+    const engine = new SimulatedEngine(initialCapital, autoTradeLimit, coins, ohlcv, intervalMs, feeRate, slippageBps)
+
+    // EvaluationCycle is the single decision loop shared with the live runner.
+    // getRecentTrades wires the same context the live runner provides via DB.
+    const cycle = new EvaluationCycle({
+      pipeline,
+      adapter,
+      engine,
+      autoTradeLimit,
+      getRecentTrades: () => Promise.resolve(engine.getClosedTrades().slice(-5).map(toTrade)),
+    })
 
     let current = from.getTime()
     const end = to.getTime()
+    const total = Math.ceil((end - from.getTime()) / intervalMs)
+    let step = 1
 
     while (current < end) {
       const currentTime = new Date(current)
-      const snapshot = historicalSlice(allSignals, ohlcv, currentTime)
+      pipeline.setTime(currentTime)
+      engine.setTime(currentTime)
 
-      const closedTrades = trades.filter(t => t.closedAt !== undefined)
+      const { decision } = await cycle.run()
 
-      const context: TradingContext = {
-        snapshot,
-        positions: openPositions.map(p => ({
-          coin: p.trade.coin,
-          size: p.trade.size,
-          entryPrice: p.trade.entryPrice,
-          currentPrice:
-            lastCandleAtOrBefore(ohlcv[p.trade.coin] ?? [], current)?.close ??
-            p.trade.entryPrice,
-          openedAt: p.trade.openedAt,
-        })),
-        availableCapital: capital,
-        recentTrades: closedTrades.slice(-5).map(t => ({
-          id: t.openedAt.toISOString() + t.coin,
-          coin: t.coin,
-          side: t.side,
-          size: t.size,
-          entryPrice: t.entryPrice,
-          exitPrice: t.exitPrice,
-          openedAt: t.openedAt,
-          closedAt: t.closedAt,
-          pnl: t.pnl,
-          reasoning: t.reasoning,
-        })),
-        openOrders: [],
+      engine.pushPnlPoint(currentTime)
+
+      try {
+        await this.config.onStep?.(step, total, currentTime, decision)
+      } catch (err) {
+        console.warn('[BacktestRunner] onStep callback threw:', err)
       }
 
-      const decision = await adapter.decide(context)
-
-      if (decision.action !== 'hold' && !coins.includes(decision.coin)) {
-        // skip unknown coins
-      } else if (decision.action === 'buy' && decision.size > 0 && capital >= decision.size) {
-        const tradeSize = Math.min(decision.size, autoTradeLimit)
-        if (tradeSize > 0 && capital >= tradeSize) {
-          const fillPrice = getFillPrice(ohlcv[decision.coin] ?? [], currentTime)
-          if (fillPrice !== undefined) {
-            const trade: BacktestTrade = {
-              coin: decision.coin,
-              side: 'buy',
-              size: tradeSize,
-              entryPrice: fillPrice,
-              openedAt: currentTime,
-              reasoning: decision.reasoning,
-            }
-            capital -= tradeSize
-            trades.push(trade)
-            openPositions.push({ trade })
-          }
-        }
-      } else if (decision.action === 'sell' && decision.size > 0) {
-        let posIndex = -1
-        for (let i = openPositions.length - 1; i >= 0; i--) {
-          if (openPositions[i].trade.coin === decision.coin) { posIndex = i; break }
-        }
-        if (posIndex !== -1) {
-          const fillPrice = getFillPrice(ohlcv[decision.coin] ?? [], currentTime)
-          if (fillPrice !== undefined) {
-            const pos = openPositions[posIndex]
-            const unitsHeld = pos.trade.size / pos.trade.entryPrice
-            const proceeds = unitsHeld * fillPrice
-            pos.trade.exitPrice = fillPrice
-            pos.trade.closedAt = currentTime
-            pos.trade.pnl = proceeds - pos.trade.size
-            capital += proceeds
-            openPositions.splice(posIndex, 1)
-          }
-        }
-      }
-
-      const openPositionValue = openPositions.reduce((sum, p) => {
-        const currentPrice =
-          lastCandleAtOrBefore(ohlcv[p.trade.coin] ?? [], current)?.close ??
-          p.trade.entryPrice
-        return sum + (p.trade.size / p.trade.entryPrice) * currentPrice
-      }, 0)
-      pnlCurve.push({ timestamp: currentTime, capital: capital + openPositionValue })
       current += intervalMs
+      step++
     }
 
-    // close any remaining open positions at last known price
-    for (const pos of openPositions) {
-      const lastCandle = ohlcv[pos.trade.coin]?.at(-1)
-      if (lastCandle) {
-        pos.trade.exitPrice = lastCandle.close
-        pos.trade.closedAt = new Date(end)
-        const unitsHeld = pos.trade.size / pos.trade.entryPrice
-        pos.trade.pnl = unitsHeld * lastCandle.close - pos.trade.size
-      }
-    }
+    engine.forceCloseAll(new Date(end))
 
-    const stats = calculateStats(trades, initialCapital, pnlCurve)
-    return { trades, stats, pnlCurve }
+    const stats = calculateStats(engine.trades, initialCapital, engine.pnlCurve, intervalMs)
+    return { trades: engine.trades, stats, pnlCurve: engine.pnlCurve }
   }
 }
