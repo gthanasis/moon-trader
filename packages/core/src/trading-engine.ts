@@ -49,7 +49,7 @@ export class TradingEngine {
     this.dailyLossLimitPct = config.dailyLossLimitPct ?? 0.05
     this.feeRate = config.feeRate ?? 0
     this.dailyStartCapital = config.totalCapital
-    this.currentUtcDay = new Date().getUTCDate()
+    this.currentUtcDay = Math.floor(Date.now() / 86400000)
   }
 
   private currentEquity(): number {
@@ -63,11 +63,11 @@ export class TradingEngine {
   advanceDay(): void {
     this.dailyStartCapital = this.currentEquity()
     this.dailyRealisedPnl = 0
-    this.currentUtcDay = (this.currentUtcDay % 31) + 1
+    this.currentUtcDay += 1
   }
 
   private refreshDailyReset(): void {
-    const today = new Date().getUTCDate()
+    const today = Math.floor(Date.now() / 86400000)
     if (today !== this.currentUtcDay) {
       this.dailyStartCapital = this.currentEquity()
       this.dailyRealisedPnl = 0

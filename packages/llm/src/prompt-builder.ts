@@ -82,8 +82,8 @@ export function buildPrompt(context: TradingContext): { system: string; user: st
 
 ## Strategy Guidelines
 - Only trade top-tier cryptocurrencies (BTC/USDT, ETH/USDT, BNB/USDT, SOL/USDT, XRP/USDT, ADA/USDT, DOGE/USDT, AVAX/USDT, DOT/USDT, MATIC/USDT)
-- Only buy when confidence > 0.6
-- Never risk more than 20% of available capital on a single trade
+- The engine enforces a minimum confidence threshold before executing buys; when uncertain, choose hold
+- Position sizing is enforced by the engine based on risk parameters
 - Always include a stop-loss level for buy orders
 - Consider macro conditions — avoid buying during extreme fear unless signal is very strong
 - When uncertain, choose hold
@@ -117,8 +117,9 @@ Use the make_trading_decision tool to submit exactly one decision per analysis c
             .map(c => `  ${c.timestamp.toISOString()} O:${c.open} H:${c.high} L:${c.low} C:${c.close} V:${c.volume.toFixed(0)}`)
             .join('\n')
           const indicators = computeIndicators(candles)
+          const indicatorsLine = indicators === 'insufficient data' ? '' : ` — ${indicators}`
           const macro = coin !== 'BTC/USDT' && btcMacro ? `  [${btcMacro}]\n` : ''
-          return `${coin} — ${indicators}\n${macro}${rows}`
+          return `${coin}${indicatorsLine}\n${macro}${rows}`
         })
         .join('\n\n')
 
