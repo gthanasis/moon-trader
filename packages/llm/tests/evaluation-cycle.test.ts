@@ -206,6 +206,18 @@ describe('EvaluationCycle — confidence threshold (Task 6)', () => {
     expect(result.executed).toBe(false)
     expect(result.reason).toMatch(/confidence/i)
   })
+
+  it('never gates sell decisions on confidence — low-confidence sells must pass through', async () => {
+    mockDecide.mockResolvedValue({ action: 'sell', coin: 'BTC/USDT', size: 100, confidence: 0.3, reasoning: 'cut the loss' })
+    mockExecute.mockResolvedValue({ executed: true })
+    const cycle = new EvaluationCycle({
+      pipeline: mockPipeline as any, adapter: mockAdapter, engine: mockEngine as any,
+      autoTradeLimit: 500, minConfidence: 0.9,
+    })
+    const result = await cycle.run()
+    expect(result.executed).toBe(true)
+    expect(result.reason ?? '').not.toMatch(/confidence/i)
+  })
 })
 
 // Appended after the existing describe block — reuses module-level mocks

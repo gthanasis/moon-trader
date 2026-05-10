@@ -91,8 +91,8 @@ export class EvaluationCycle {
       return { decision, executed: false, reason: 'hold' }
     }
 
-    // Confidence gate — blocks shaky non-hold decisions before they reach the engine.
-    if (decision.confidence < minConfidence) {
+    // Confidence gate — only blocks buys; sells should always pass through (stops/TP are the exit safety net).
+    if (decision.action === 'buy' && decision.confidence < minConfidence) {
       return { decision, executed: false, reason: `Confidence ${decision.confidence.toFixed(2)} below threshold ${minConfidence}` }
     }
 
