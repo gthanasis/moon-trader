@@ -53,12 +53,16 @@ export class TradingEngine {
       })
 
       if (order.status === 'filled') {
+        if (!order.fillPrice || order.fillPrice <= 0) {
+          console.error(`[TradingEngine] Invalid fill price for ${decision.coin}: ${order.fillPrice}`)
+          return { executed: false, reason: `Invalid fill price for ${decision.coin}` }
+        }
         this.guard.reserve(decision.size)
         this.positions.open({
           coin: decision.coin,
           size: decision.size,
-          entryPrice: order.fillPrice ?? 0,
-          currentPrice: order.fillPrice ?? 0,
+          entryPrice: order.fillPrice,
+          currentPrice: order.fillPrice,
           stopLoss: decision.stopLoss,
           takeProfit: decision.takeProfit,
         })

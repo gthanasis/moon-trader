@@ -11,6 +11,7 @@ describe('TradingEngine', () => {
   })
 
   it('executes a buy decision and opens a position', async () => {
+    engine.updatePositionPrice('BTC/USDT', 50000)
     const decision: LLMDecision = {
       action: 'buy',
       coin: 'BTC/USDT',
@@ -74,6 +75,16 @@ describe('TradingEngine', () => {
 
     // bought 200/50000 = 0.004 BTC, sold at 40000 → proceeds = 0.004 * 40000 = 160
     expect(engine.availableCapital()).toBeCloseTo(960, 0)
+  })
+
+  it('rejects a buy and leaves capital unchanged when fill price is zero', async () => {
+    // No updatePositionPrice call → market price unknown → paper fill = 0
+    const result = await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy' })
+
+    expect(result.executed).toBe(false)
+    expect(result.reason).toMatch(/invalid fill price/i)
+    expect(engine.getPositions()).toHaveLength(0)
+    expect(engine.availableCapital()).toBe(1000) // capital must be untouched
   })
 
   it('rejects a buy when a position for that coin is already open', async () => {
