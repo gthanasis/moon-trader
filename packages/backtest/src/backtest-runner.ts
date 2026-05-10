@@ -241,6 +241,8 @@ export class BacktestRunner {
       adapter,
       engine,
       autoTradeLimit,
+      riskPerTradePct: this.config.riskPerTradePct,
+      minConfidence: this.config.minConfidence,
       getRecentTrades: () => Promise.resolve(engine.getClosedTrades().slice(-5).map(toTrade)),
     })
 

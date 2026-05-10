@@ -300,4 +300,54 @@ describe('BacktestRunner', () => {
 
     expect(result.trades).toHaveLength(0)
   })
+
+  it('respects minConfidence — buy with confidence below threshold is not executed', async () => {
+    // confidence 0.65 > default 0.6, so it would execute without the custom threshold;
+    // with minConfidence: 0.7 set, it must be blocked
+    const adapter = { decide: vi.fn(async (): Promise<LLMDecision> => ({
+      action: 'buy', coin: 'BTC', size: 100, confidence: 0.65, reasoning: 'weak signal',
+    })) }
+
+    const config: BacktestConfig = {
+      from: t0, to: t2,
+      initialCapital: 1000, autoTradeLimit: 500,
+      coins: ['BTC'], sources: [makeNullSource()],
+      ohlcv: { BTC: [makeCandle(t0, 100), makeCandle(t1, 110), makeCandle(t2, 120)] },
+      adapter, intervalMs: 15 * 60 * 1000,
+      slippageBps: 0, feeRate: 0,
+      minConfidence: 0.7,
+    }
+
+    const result = await new BacktestRunner(config).run()
+    expect(result.trades).toHaveLength(0)
+  })
+
+  it('respects riskPerTradePct — with stopLoss provided, size is risk-budget based', async () => {
+    // capital=1000, riskPerTradePct=0.01, stopLoss at 90 (10% below entry of 100) → stopDistance=0.10
+    // risk-based size = 1000 * 0.01 / 0.10 = 100 (capped at autoTradeLimit=500)
+    let capturedSize = 0
+    const adapter = {
+      decide: vi.fn(async (): Promise<LLMDecision> => {
+        if (capturedSize === 0) {
+          return { action: 'buy', coin: 'BTC', size: 9999, confidence: 0.9, reasoning: 'buy', stopLoss: 90 }
+        }
+        return { action: 'hold', coin: '', size: 0, confidence: 0.5, reasoning: 'hold' }
+      }),
+    }
+
+    const ohlcv = { BTC: [makeCandle(t0, 100), makeCandle(t1, 100), makeCandle(t2, 100), makeCandle(t3, 100)] }
+    const config: BacktestConfig = {
+      from: t0, to: t3,
+      initialCapital: 1000, autoTradeLimit: 500,
+      coins: ['BTC'], sources: [makeNullSource()],
+      ohlcv, adapter, intervalMs: 15 * 60 * 1000,
+      slippageBps: 0, feeRate: 0,
+      riskPerTradePct: 0.01,
+    }
+
+    const result = await new BacktestRunner(config).run()
+    // Should have executed a buy with size ≈ 100, not the LLM's 9999
+    expect(result.trades.length).toBeGreaterThan(0)
+    expect(result.trades[0].size).toBeCloseTo(100, 0)
+  })
 })

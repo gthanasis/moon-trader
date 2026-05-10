@@ -16,6 +16,10 @@ export interface BacktestConfig {
   feeRate?: number
   /** Slippage in basis points applied to fill price. Default: 5 (0.05%). */
   slippageBps?: number
+  /** Fraction of capital risked per trade when a stop-loss is provided. Default: 0.01 (1%). */
+  riskPerTradePct?: number
+  /** Minimum LLM confidence for a buy to execute. Default: 0.6. */
+  minConfidence?: number
   onStep?: (step: number, total: number, timestamp: Date, decision: LLMDecision) => void | Promise<void>
 }
 
