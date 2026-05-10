@@ -7,11 +7,17 @@ vi.mock('@trader/backtest', () => ({
       trades: [],
       stats: {
         totalPnl: 150,
+        totalFees: 2,
         winRate: 0.6,
         maxDrawdown: 0.05,
         sharpeRatio: 1.2,
+        calmarRatio: 1.5,
+        profitFactor: 2.0,
+        avgWin: 30,
+        avgLoss: -15,
         avgHoldTimeMs: 3600000,
         totalTrades: 10,
+        initialCapital: 1000,
       },
       pnlCurve: [
         { timestamp: new Date('2025-01-01'), capital: 1000 },
@@ -31,6 +37,7 @@ vi.mock('@trader/db', () => ({
 // Mock @trader/llm
 vi.mock('@trader/llm', () => ({
   ClaudeAdapter: vi.fn().mockImplementation(() => ({})),
+  OpenAIAdapter: vi.fn().mockImplementation(() => ({})),
 }))
 
 import { runBacktest } from '../app/backtest/actions'

@@ -47,18 +47,23 @@ describe('loadConfig', () => {
     expect(() => loadConfig()).toThrow('BINANCE_SECRET')
   })
 
-  it('throws when ANTHROPIC_API_KEY is missing', () => {
+  it('throws when ANTHROPIC_API_KEY is missing and LLM_PROVIDER=anthropic', () => {
     process.env['BINANCE_API_KEY'] = 'key'
     process.env['BINANCE_SECRET'] = 'secret'
-    expect(() => loadConfig()).toThrow('ANTHROPIC_API_KEY')
+    process.env['LLM_PROVIDER'] = 'anthropic'
+    try {
+      expect(() => loadConfig()).toThrow('ANTHROPIC_API_KEY')
+    } finally {
+      delete process.env['LLM_PROVIDER']
+    }
   })
 
   it('returns config with required values when all env vars set', () => {
-    withEnv(requiredEnv, () => {
+    withEnv({ ...requiredEnv, LLM_PROVIDER: 'anthropic' }, () => {
       const config = loadConfig()
       expect(config.binanceApiKey).toBe('test-key')
       expect(config.binanceSecret).toBe('test-secret')
-      expect(config.anthropicApiKey).toBe('test-anthropic')
+      expect(config.llmApiKey).toBe('test-anthropic')
     })
   })
 

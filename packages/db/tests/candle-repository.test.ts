@@ -49,6 +49,6 @@ describe('CandleRepository', () => {
     expect(where['timeframe']).toBe('15m')
     const ts = where['timestamp'] as Record<string, Date>
     expect(ts['gte']).toEqual(from)
-    expect(ts['lte']).toEqual(to)
+    expect(ts['lt']).toEqual(to)
   })
 })
