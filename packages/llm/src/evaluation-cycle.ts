@@ -46,7 +46,10 @@ export interface EvaluationCycleConfig {
 }
 
 export interface CycleResult {
+  /** The raw decision as returned by the LLM adapter — never mutated. */
   decision: LLMDecision
+  /** The decision that was actually forwarded to the engine (may have size overridden by risk sizing). */
+  executedDecision: LLMDecision
   executed: boolean
   reason?: string
 }
@@ -86,14 +89,16 @@ export class EvaluationCycle {
     await engine.checkStopLosses()
 
     const decision = await adapter.decide(context)
+    // executedDecision starts as a copy; risk sizing may override its size without touching decision.
+    let executedDecision: LLMDecision = { ...decision }
 
     if (decision.action === 'hold') {
-      return { decision, executed: false, reason: 'hold' }
+      return { decision, executedDecision, executed: false, reason: 'hold' }
     }
 
     // Confidence gate — only blocks buys; sells should always pass through (stops/TP are the exit safety net).
     if (decision.action === 'buy' && decision.confidence < minConfidence) {
-      return { decision, executed: false, reason: `Confidence ${decision.confidence.toFixed(2)} below threshold ${minConfidence}` }
+      return { decision, executedDecision, executed: false, reason: `Confidence ${decision.confidence.toFixed(2)} below threshold ${minConfidence}` }
     }
 
     // Risk-based sizing for buys with a stop-loss.
@@ -103,37 +108,38 @@ export class EvaluationCycle {
       if (currentPrice && currentPrice > 0) {
         const stopDistance = (currentPrice - decision.stopLoss) / currentPrice
         if (stopDistance < 0.003) {
-          return { decision, executed: false, reason: `Stop too tight: ${(stopDistance * 100).toFixed(2)}% < 0.3% minimum` }
+          return { decision, executedDecision, executed: false, reason: `Stop too tight: ${(stopDistance * 100).toFixed(2)}% < 0.3% minimum` }
         }
         if (stopDistance > 0.15) {
-          return { decision, executed: false, reason: `Stop too loose: ${(stopDistance * 100).toFixed(2)}% > 15% maximum` }
+          return { decision, executedDecision, executed: false, reason: `Stop too loose: ${(stopDistance * 100).toFixed(2)}% > 15% maximum` }
         }
-        decision.size = Math.min(
+        const riskSize = Math.min(
           (engine.availableCapital() * riskPerTradePct) / stopDistance,
           autoTradeLimit,
         )
+        executedDecision = { ...decision, size: riskSize }
       }
     }
 
-    if (decision.size > autoTradeLimit && onApprovalNeeded) {
-      const approved = await onApprovalNeeded(decision)
+    if (executedDecision.size > autoTradeLimit && onApprovalNeeded) {
+      const approved = await onApprovalNeeded(executedDecision)
       if (!approved) {
-        return { decision, executed: false, reason: 'rejected by user' }
+        return { decision, executedDecision, executed: false, reason: 'rejected by user' }
       }
     }
 
-    const result = await engine.execute(decision)
+    const result = await engine.execute(executedDecision)
 
     if (result.executed && notifier) {
       await notifier.tradeExecuted({
-        coin: decision.coin,
-        side: decision.action as 'buy' | 'sell',
-        size: decision.size,
+        coin: executedDecision.coin,
+        side: executedDecision.action as 'buy' | 'sell',
+        size: executedDecision.size,
         fillPrice: result.order?.fillPrice ?? 0,
-        reasoning: decision.reasoning,
+        reasoning: executedDecision.reasoning,
       })
     }
 
-    return { decision, executed: result.executed, reason: result.reason }
+    return { decision, executedDecision, executed: result.executed, reason: result.reason }
   }
 }

@@ -162,6 +162,21 @@ describe('EvaluationCycle — risk-based sizing (Task 5)', () => {
     const executedDecision = mockExecute.mock.calls[0][0] as LLMDecision
     expect(executedDecision.size).toBe(75)
   })
+
+  it('preserves original LLM size in result.decision when risk sizing overrides it', async () => {
+    // LLM asks for 9999; risk sizing will produce ~500
+    mockFetch.mockResolvedValue(snapshotWith(50000))
+    mockDecide.mockResolvedValue({ action: 'buy', coin: 'BTC/USDT', size: 9999, confidence: 0.9, reasoning: 'r', stopLoss: 49000 })
+    const cycle = new EvaluationCycle({ pipeline: mockPipeline as any, adapter: mockAdapter, engine: mockEngine as any, autoTradeLimit: 600, riskPerTradePct: 0.01 })
+    const result = await cycle.run()
+    // The LLM's original intent must be preserved in result.decision
+    expect(result.decision.size).toBe(9999)
+    // The engine must receive the risk-sized value via result.executedDecision
+    expect(result.executedDecision.size).toBeCloseTo(500, 0)
+    // Engine was called with the risk-sized value
+    const engineCall = mockExecute.mock.calls[0][0] as LLMDecision
+    expect(engineCall.size).toBeCloseTo(500, 0)
+  })
 })
 
 describe('EvaluationCycle — confidence threshold (Task 6)', () => {
