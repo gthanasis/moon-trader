@@ -38,7 +38,6 @@ export class TradingEngine {
   private readonly dailyLossLimitPct: number
   private readonly feeRate: number
   private dailyStartCapital: number
-  private dailyRealisedPnl = 0
   private currentUtcDay: number
 
   constructor(config: TradingEngineConfig) {
@@ -48,8 +47,8 @@ export class TradingEngine {
     this.maxPositions = config.maxPositions ?? 5
     this.dailyLossLimitPct = config.dailyLossLimitPct ?? 0.05
     this.feeRate = config.feeRate ?? 0
-    this.dailyStartCapital = config.totalCapital
     this.currentUtcDay = Math.floor(Date.now() / 86400000)
+    this.dailyStartCapital = this.currentEquity()
   }
 
   private currentEquity(): number {
@@ -62,7 +61,6 @@ export class TradingEngine {
   /** Test seam: simulate crossing into a new UTC day, resetting daily loss tracking. */
   advanceDay(): void {
     this.dailyStartCapital = this.currentEquity()
-    this.dailyRealisedPnl = 0
     this.currentUtcDay += 1
   }
 
@@ -70,7 +68,6 @@ export class TradingEngine {
     const today = Math.floor(Date.now() / 86400000)
     if (today !== this.currentUtcDay) {
       this.dailyStartCapital = this.currentEquity()
-      this.dailyRealisedPnl = 0
       this.currentUtcDay = today
     }
   }
@@ -152,9 +149,9 @@ export class TradingEngine {
           : position.size
         const sellFee = grossProceeds * this.feeRate
         const netProceeds = grossProceeds - sellFee
-        this.dailyRealisedPnl += netProceeds - position.size
         this.positions.close(decision.coin)
         this.baseQty.delete(decision.coin)
+        this.currentPrices.delete(decision.coin)
         this.guard.releaseWithProceeds(position.size, netProceeds)
       }
 
@@ -170,6 +167,7 @@ export class TradingEngine {
   }
 
   async checkStopLosses(): Promise<void> {
+    this.refreshDailyReset()
     for (const position of this.positions.getAll()) {
       const price = position.currentPrice
 
@@ -206,10 +204,10 @@ export class TradingEngine {
           ? (current.size / current.entryPrice) * (order.fillPrice ?? price)
           : current.size
         const netProceeds = grossProceeds * (1 - this.feeRate)
-        this.dailyRealisedPnl += netProceeds - current.size
         this.positions.close(current.coin)
         this.highWaterMarks.delete(current.coin)
         this.baseQty.delete(current.coin)
+        this.currentPrices.delete(current.coin)
         this.guard.releaseWithProceeds(current.size, netProceeds)
       }
     }
