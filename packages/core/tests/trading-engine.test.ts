@@ -179,6 +179,95 @@ describe('TradingEngine.checkStopLosses', () => {
   })
 })
 
+describe('TradingEngine max positions', () => {
+  it('rejects a buy when maxPositions limit is reached', async () => {
+    const engine = new TradingEngine({ totalCapital: 10000, paper: true, maxPositions: 2 })
+    const coins = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT']
+    for (const coin of coins) engine.updatePositionPrice(coin, 100)
+
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 100, confidence: 0.9, reasoning: 'b1' })
+    await engine.execute({ action: 'buy', coin: 'ETH/USDT', size: 100, confidence: 0.9, reasoning: 'b2' })
+    const third = await engine.execute({ action: 'buy', coin: 'SOL/USDT', size: 100, confidence: 0.9, reasoning: 'b3' })
+
+    expect(third.executed).toBe(false)
+    expect(third.reason).toMatch(/max.*position/i)
+    expect(engine.getPositions()).toHaveLength(2)
+  })
+
+  it('allows buying again after closing a position below the limit', async () => {
+    const engine = new TradingEngine({ totalCapital: 10000, paper: true, maxPositions: 1 })
+    engine.updatePositionPrice('BTC/USDT', 50000)
+    engine.updatePositionPrice('ETH/USDT', 3000)
+
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 100, confidence: 0.9, reasoning: 'b1' })
+    await engine.execute({ action: 'sell', coin: 'BTC/USDT', size: 100, confidence: 0.8, reasoning: 's1' })
+    const eth = await engine.execute({ action: 'buy', coin: 'ETH/USDT', size: 100, confidence: 0.9, reasoning: 'b2' })
+
+    expect(eth.executed).toBe(true)
+    expect(engine.getPositions()).toHaveLength(1)
+  })
+
+  it('defaults to 5 max positions when not configured', async () => {
+    const engine = new TradingEngine({ totalCapital: 10000, paper: true })
+    const coins = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'ADA/USDT', 'DOGE/USDT']
+    for (const coin of coins) engine.updatePositionPrice(coin, 100)
+    for (const coin of coins.slice(0, 5)) {
+      await engine.execute({ action: 'buy', coin, size: 100, confidence: 0.9, reasoning: 'b' })
+    }
+
+    const sixth = await engine.execute({ action: 'buy', coin: 'DOGE/USDT', size: 100, confidence: 0.9, reasoning: 'b6' })
+    expect(sixth.executed).toBe(false)
+    expect(sixth.reason).toMatch(/max.*position/i)
+  })
+})
+
+describe('TradingEngine daily loss circuit breaker', () => {
+  it('blocks a buy when daily loss exceeds the configured limit', async () => {
+    const engine = new TradingEngine({ totalCapital: 1000, paper: true, dailyLossLimitPct: 0.05 })
+    engine.updatePositionPrice('BTC/USDT', 50000)
+    engine.updatePositionPrice('ETH/USDT', 3000)
+
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy' })
+    // BTC drops 30% → 200 * 0.004 BTC sold at 35000 → proceeds = 140 → loss = 60 (6% of 1000)
+    engine.updatePositionPrice('BTC/USDT', 35000)
+    await engine.execute({ action: 'sell', coin: 'BTC/USDT', size: 200, confidence: 0.8, reasoning: 'sell' })
+
+    const eth = await engine.execute({ action: 'buy', coin: 'ETH/USDT', size: 100, confidence: 0.9, reasoning: 'eth buy' })
+    expect(eth.executed).toBe(false)
+    expect(eth.reason).toMatch(/daily loss/i)
+  })
+
+  it('does not block buys when daily loss is within the limit', async () => {
+    const engine = new TradingEngine({ totalCapital: 1000, paper: true, dailyLossLimitPct: 0.05 })
+    engine.updatePositionPrice('BTC/USDT', 50000)
+    engine.updatePositionPrice('ETH/USDT', 3000)
+
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 100, confidence: 0.9, reasoning: 'buy' })
+    // BTC drops 2% → small loss, well within 5% limit
+    engine.updatePositionPrice('BTC/USDT', 49000)
+    await engine.execute({ action: 'sell', coin: 'BTC/USDT', size: 100, confidence: 0.8, reasoning: 'sell' })
+
+    const eth = await engine.execute({ action: 'buy', coin: 'ETH/USDT', size: 100, confidence: 0.9, reasoning: 'eth buy' })
+    expect(eth.executed).toBe(true)
+  })
+
+  it('resets daily loss tracking at the start of a new UTC day', async () => {
+    const engine = new TradingEngine({ totalCapital: 1000, paper: true, dailyLossLimitPct: 0.05 })
+    engine.updatePositionPrice('BTC/USDT', 50000)
+    engine.updatePositionPrice('ETH/USDT', 3000)
+
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy' })
+    engine.updatePositionPrice('BTC/USDT', 35000)
+    await engine.execute({ action: 'sell', coin: 'BTC/USDT', size: 200, confidence: 0.8, reasoning: 'sell' })
+
+    // Advance to next UTC day
+    engine.advanceDay()
+
+    const eth = await engine.execute({ action: 'buy', coin: 'ETH/USDT', size: 100, confidence: 0.9, reasoning: 'eth buy after reset' })
+    expect(eth.executed).toBe(true)
+  })
+})
+
 describe('TradingEngine live mode', () => {
   it('passes currentPrice to OrderManager when selling live', async () => {
     const sellSpy = vi.fn(async (): Promise<ExecutedOrder> => ({

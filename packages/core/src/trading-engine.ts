@@ -8,6 +8,10 @@ interface TradingEngineConfig {
   totalCapital: number
   paper: boolean
   exchange?: ExchangeAdapter
+  /** Maximum number of simultaneous open positions. Default: 5. */
+  maxPositions?: number
+  /** Fraction of day-start capital that may be lost before new buys are blocked. Default: 0.05 (5%). */
+  dailyLossLimitPct?: number
 }
 
 interface ExecuteResult {
@@ -25,11 +29,36 @@ export class TradingEngine {
   private readonly orders: OrderManager
   private readonly currentPrices = new Map<string, number>()
   private readonly highWaterMarks = new Map<string, number>()
+  private readonly maxPositions: number
+  private readonly dailyLossLimitPct: number
+  private dailyStartCapital: number
+  private dailyRealisedPnl = 0
+  private currentUtcDay: number
 
   constructor(config: TradingEngineConfig) {
     this.guard = new CapitalGuard({ totalCapital: config.totalCapital })
     this.positions = new PositionTracker()
     this.orders = new OrderManager({ paper: config.paper, exchange: config.exchange })
+    this.maxPositions = config.maxPositions ?? 5
+    this.dailyLossLimitPct = config.dailyLossLimitPct ?? 0.05
+    this.dailyStartCapital = config.totalCapital
+    this.currentUtcDay = new Date().getUTCDate()
+  }
+
+  /** Test seam: simulate crossing into a new UTC day, resetting daily loss tracking. */
+  advanceDay(): void {
+    this.dailyStartCapital = this.guard.availableCapital()
+    this.dailyRealisedPnl = 0
+    this.currentUtcDay = (this.currentUtcDay % 31) + 1
+  }
+
+  private refreshDailyReset(): void {
+    const today = new Date().getUTCDate()
+    if (today !== this.currentUtcDay) {
+      this.dailyStartCapital = this.guard.availableCapital()
+      this.dailyRealisedPnl = 0
+      this.currentUtcDay = today
+    }
   }
 
   async execute(decision: LLMDecision): Promise<ExecuteResult> {
@@ -38,8 +67,19 @@ export class TradingEngine {
     }
 
     if (decision.action === 'buy') {
+      this.refreshDailyReset()
+
       if (this.positions.get(decision.coin)) {
         return { executed: false, reason: `Position already open for ${decision.coin}` }
+      }
+
+      if (this.positions.getAll().length >= this.maxPositions) {
+        return { executed: false, reason: `Max positions reached (${this.maxPositions})` }
+      }
+
+      if (this.dailyRealisedPnl < -this.dailyStartCapital * this.dailyLossLimitPct) {
+        const lossPct = (-this.dailyRealisedPnl / this.dailyStartCapital * 100).toFixed(1)
+        return { executed: false, reason: `Daily loss limit hit: lost ${lossPct}% today` }
       }
 
       if (!this.guard.canTrade(decision.size)) {
@@ -94,6 +134,7 @@ export class TradingEngine {
         const proceeds = position.entryPrice > 0
           ? (position.size / position.entryPrice) * (order.fillPrice ?? position.currentPrice)
           : decision.size
+        this.dailyRealisedPnl += proceeds - position.size
         this.positions.close(decision.coin)
         this.guard.releaseWithProceeds(position.size, proceeds)
       }
@@ -144,6 +185,7 @@ export class TradingEngine {
         const proceeds = current.entryPrice > 0
           ? (current.size / current.entryPrice) * (order.fillPrice ?? price)
           : current.size
+        this.dailyRealisedPnl += proceeds - current.size
         this.positions.close(current.coin)
         this.highWaterMarks.delete(current.coin)
         this.guard.releaseWithProceeds(current.size, proceeds)
