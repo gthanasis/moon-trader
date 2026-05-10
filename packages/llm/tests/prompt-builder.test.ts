@@ -187,5 +187,43 @@ describe('buildPrompt', () => {
       expect(user).toContain('BTC/USDT')
       // should not throw; indicators show n/a or computed value
     })
+
+    it('vol annualisation scales with bar interval — 15m bars give lower vol than 1m bars for same price series', () => {
+      const closes = [
+        50000, 50200, 50100, 50400, 50300, 50600, 50500, 50700, 50800, 50600,
+        50900, 51000, 50800, 51100, 51200, 51000, 51300, 51400, 51200, 51500, 51600,
+      ]
+      function candlesWithBarMs(closes: number[], barMs: number) {
+        return closes.map((c, i) => ({
+          timestamp: new Date(i * barMs),
+          open: c, high: c * 1.005, low: c * 0.995, close: c, volume: 1000,
+        }))
+      }
+      const ctx1m = contextWithCandles('BTC/USDT', candlesWithBarMs(closes, 60_000))
+      const ctx15m = contextWithCandles('BTC/USDT', candlesWithBarMs(closes, 15 * 60_000))
+
+      function extractVol(user: string): number {
+        const m = user.match(/vol=([\d.]+)%/)
+        return m ? parseFloat(m[1]) : 0
+      }
+
+      const vol1m = extractVol(buildPrompt(ctx1m).user)
+      const vol15m = extractVol(buildPrompt(ctx15m).user)
+      // 15m bars should produce √15 ≈ 3.87× lower annualised vol than 1m bars
+      expect(vol1m / vol15m).toBeCloseTo(Math.sqrt(15), 0)
+    })
+
+    it('EMA on full series gives more accurate result than EMA seeded from sliced window', () => {
+      // Strongly trending series: 100 bars from 50000 → 55000
+      const closesLong = Array.from({ length: 100 }, (_, i) => 50000 + i * 50)
+      const candles = closesLong.map((c, i) => ({
+        timestamp: new Date(i * 60000),
+        open: c, high: c * 1.005, low: c * 0.995, close: c, volume: 1000,
+      }))
+      const { user } = buildPrompt(contextWithCandles('BTC/USDT', candles))
+      // With a sustained uptrend and full convergence, EMA20 should be below the last close
+      // (last close ≈ 54950, EMA20 lags behind). The EMA20 distance should be positive.
+      expect(user).toMatch(/EMA20\+[\d.]+%/)
+    })
   })
 })

@@ -32,13 +32,17 @@ function atr(candles: Candle[], period = 14): number {
   return slice.reduce((a, b) => a + b, 0) / slice.length
 }
 
-function realisedVol(closes: number[], period = 20): number {
-  if (closes.length < period + 1) return 0
-  const slice = closes.slice(-period - 1)
-  const logReturns = slice.slice(1).map((c, i) => Math.log(c / slice[i]))
+function realisedVol(candles: Candle[], period = 20): number {
+  if (candles.length < period + 1) return 0
+  const slice = candles.slice(-period - 1)
+  const closes = slice.map(c => c.close)
+  const logReturns = closes.slice(1).map((c, i) => Math.log(c / closes[i]))
   const mean = logReturns.reduce((a, b) => a + b, 0) / logReturns.length
   const variance = logReturns.reduce((a, b) => a + (b - mean) ** 2, 0) / (logReturns.length - 1)
-  return Math.sqrt(variance * 365 * 24 * 60) // annualised from per-bar
+  // Derive bar length from adjacent timestamps so annualisation is timeframe-agnostic.
+  const barMs = candles[candles.length - 1].timestamp.getTime() - candles[candles.length - 2].timestamp.getTime()
+  const barsPerYear = (365.25 * 24 * 3600 * 1000) / Math.max(barMs, 1)
+  return Math.sqrt(variance * barsPerYear)
 }
 
 function volZScore(volumes: number[], period = 20): number {
@@ -58,15 +62,15 @@ function computeIndicators(candles: Candle[]): string {
 
   const rsi14 = rsi(closes).toFixed(1)
 
-  const ema20val = ema(closes.slice(-20), 20)
-  const ema50val = ema(closes.slice(-50), 50)
+  const ema20val = ema(closes, 20)
+  const ema50val = ema(closes, 50)
   const ema20dist = ((lastClose - ema20val) / ema20val * 100)
   const ema50dist = ((lastClose - ema50val) / ema50val * 100)
   const ema20str = `EMA20${ema20dist >= 0 ? '+' : ''}${ema20dist.toFixed(1)}%`
   const ema50str = `EMA50${ema50dist >= 0 ? '+' : ''}${ema50dist.toFixed(1)}%`
 
   const atr14 = atr(candles).toFixed(1)
-  const vol = (realisedVol(closes) * 100).toFixed(1)
+  const vol = (realisedVol(candles) * 100).toFixed(1)
   const volZ = volZScore(volumes).toFixed(2)
   const trend = ema20val > ema50val ? 'bullish' : 'bearish'
 
