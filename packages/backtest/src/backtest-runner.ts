@@ -85,6 +85,7 @@ class SimulatedEngine implements EngineLike {
     private readonly slippageBps: number,
     private readonly maxPositions: number,
     private readonly dailyLossLimitPct: number,
+    private readonly maxSinglePositionPct: number,
   ) {
     this.capital = initialCapital
     this.dailyStartCapital = initialCapital
@@ -147,6 +148,10 @@ class SimulatedEngine implements EngineLike {
       if (dailyDrawdown > this.dailyStartCapital * this.dailyLossLimitPct) {
         const lossPct = (dailyDrawdown / this.dailyStartCapital * 100).toFixed(1)
         return { executed: false, reason: `Daily loss limit hit: lost ${lossPct}% today` }
+      }
+      const maxSize = this.capital * this.maxSinglePositionPct
+      if (decision.size > maxSize) {
+        return { executed: false, reason: `Size ${decision.size.toFixed(2)} exceeds max single position (${(this.maxSinglePositionPct * 100).toFixed(0)}% of capital = ${maxSize.toFixed(2)})` }
       }
       if (this.capital < decision.size) return { executed: false, reason: 'insufficient capital' }
       const tradeSize = Math.min(decision.size, this.autoTradeLimit)
@@ -260,7 +265,14 @@ class SimulatedEngine implements EngineLike {
 }
 
 export class BacktestRunner {
+  private _cancelled = false
+
   constructor(private readonly config: BacktestConfig) {}
+
+  /** Signal the run loop to stop after the current step. */
+  cancel(): void { this._cancelled = true }
+
+  get wasCancelled(): boolean { return this._cancelled }
 
   async run(): Promise<BacktestResult> {
     const { from, to, initialCapital, autoTradeLimit, coins, sources, ohlcv, adapter } = this.config
@@ -283,9 +295,10 @@ export class BacktestRunner {
 
     const maxPositions = this.config.maxPositions ?? 5
     const dailyLossLimitPct = this.config.dailyLossLimitPct ?? 0.05
+    const maxSinglePositionPct = this.config.maxSinglePositionPct ?? 0.25
 
     const pipeline = new HistoricalPipeline(allSignals, ohlcv)
-    const engine = new SimulatedEngine(initialCapital, autoTradeLimit, coins, ohlcv, intervalMs, feeRate, slippageBps, maxPositions, dailyLossLimitPct)
+    const engine = new SimulatedEngine(initialCapital, autoTradeLimit, coins, ohlcv, intervalMs, feeRate, slippageBps, maxPositions, dailyLossLimitPct, maxSinglePositionPct)
 
     // EvaluationCycle is the single decision loop shared with the live runner.
     // getRecentTrades wires the same context the live runner provides via DB.
@@ -307,7 +320,7 @@ export class BacktestRunner {
     const total = Math.ceil((end - current) / intervalMs)
     let step = 1
 
-    while (current < end) {
+    while (current < end && !this._cancelled) {
       const currentTime = new Date(current)
       pipeline.setTime(currentTime)
       engine.setTime(currentTime)
@@ -326,7 +339,7 @@ export class BacktestRunner {
       step++
     }
 
-    engine.forceCloseAll(new Date(end))
+    engine.forceCloseAll(new Date(this._cancelled ? current : end))
 
     const stats = calculateStats(engine.trades, initialCapital, engine.pnlCurve, intervalMs)
     return { trades: engine.trades, stats, pnlCurve: engine.pnlCurve }

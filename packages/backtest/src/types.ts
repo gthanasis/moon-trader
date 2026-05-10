@@ -22,6 +22,8 @@ export interface BacktestConfig {
   minConfidence?: number
   /** Maximum simultaneous open positions. Default: 5. */
   maxPositions?: number
+  /** Maximum fraction of available capital in a single position. Default: 0.25 (25%). */
+  maxSinglePositionPct?: number
   /** Fraction of day-start equity that may be lost before new buys are blocked. Default: 0.05 (5%). */
   dailyLossLimitPct?: number
   /**

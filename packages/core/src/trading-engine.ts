@@ -18,6 +18,8 @@ interface TradingEngineConfig {
   exchange?: ExchangeAdapter
   /** Maximum number of simultaneous open positions. Default: 5. */
   maxPositions?: number
+  /** Maximum fraction of available capital in a single position. Default: 0.25 (25%). */
+  maxSinglePositionPct?: number
   /** Fraction of day-start capital that may be lost before new buys are blocked. Default: 0.05 (5%). */
   dailyLossLimitPct?: number
   /** Fee charged on each trade as a fraction of size/proceeds. Default: 0 (no fee in paper). */
@@ -45,6 +47,7 @@ export class TradingEngine {
   private readonly highWaterMarks = new Map<string, number>()
   private readonly baseQty = new Map<string, number>()
   private readonly maxPositions: number
+  private readonly maxSinglePositionPct: number
   private readonly dailyLossLimitPct: number
   private readonly feeRate: number
   private readonly onPositionClosed: ((event: PositionClosedEvent) => void | Promise<void>) | undefined
@@ -56,6 +59,7 @@ export class TradingEngine {
     this.positions = new PositionTracker()
     this.orders = new OrderManager({ paper: config.paper, exchange: config.exchange, slippageBps: config.slippageBps })
     this.maxPositions = config.maxPositions ?? 5
+    this.maxSinglePositionPct = config.maxSinglePositionPct ?? 0.25
     this.dailyLossLimitPct = config.dailyLossLimitPct ?? 0.05
     this.feeRate = config.feeRate ?? 0
     this.onPositionClosed = config.onPositionClosed
@@ -104,6 +108,14 @@ export class TradingEngine {
       if (dailyDrawdown > this.dailyStartCapital * this.dailyLossLimitPct) {
         const lossPct = (dailyDrawdown / this.dailyStartCapital * 100).toFixed(1)
         return { executed: false, reason: `Daily loss limit hit: lost ${lossPct}% today` }
+      }
+
+      const maxSize = this.guard.availableCapital() * this.maxSinglePositionPct
+      if (decision.size > maxSize) {
+        return {
+          executed: false,
+          reason: `Size ${decision.size.toFixed(2)} exceeds max single position (${(this.maxSinglePositionPct * 100).toFixed(0)}% of capital = ${maxSize.toFixed(2)})`,
+        }
       }
 
       if (!this.guard.canTrade(decision.size)) {

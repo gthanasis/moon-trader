@@ -456,6 +456,7 @@ describe('BacktestRunner — parity with live risk caps', () => {
       },
       adapter, intervalMs: 15 * 60 * 1000, slippageBps: 0, feeRate: 0,
       dailyLossLimitPct: 0.05,
+      maxSinglePositionPct: 1.0, // no per-position cap so we can test the daily-loss guard in isolation
     }
 
     const result = await new BacktestRunner(config).run()
