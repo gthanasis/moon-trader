@@ -279,6 +279,27 @@ describe('TradingEngine daily loss circuit breaker', () => {
     expect(eth.executed).toBe(true)
   })
 
+  it('blocks a new buy when unrealised drawdown alone exceeds the limit', async () => {
+    // 5 positions each down 2% = 10% total unrealised loss — circuit breaker must fire even though
+    // nothing has been sold yet (dailyRealisedPnl would be 0 with the old approach)
+    const engine = new TradingEngine({ totalCapital: 1000, paper: true, dailyLossLimitPct: 0.05, maxPositions: 10 })
+    const coins = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'BNB/USDT', 'ADA/USDT', 'DOGE/USDT']
+    for (const coin of coins) engine.updatePositionPrice(coin, 100)
+
+    // Open 5 positions at $100 each, total deployed = $500
+    for (const coin of coins.slice(0, 5)) {
+      await engine.execute({ action: 'buy', coin, size: 100, confidence: 0.9, reasoning: 'b' })
+    }
+
+    // All 5 drop 15% → each position now worth $85 → unrealised loss = $75 (7.5% of $1000)
+    for (const coin of coins.slice(0, 5)) engine.updatePositionPrice(coin, 85)
+
+    // New buy attempt — must be blocked even though no sells have happened
+    const sixth = await engine.execute({ action: 'buy', coin: 'DOGE/USDT', size: 50, confidence: 0.9, reasoning: 'new buy' })
+    expect(sixth.executed).toBe(false)
+    expect(sixth.reason).toMatch(/daily loss/i)
+  })
+
   it('resets daily loss tracking at the start of a new UTC day', async () => {
     const engine = new TradingEngine({ totalCapital: 1000, paper: true, dailyLossLimitPct: 0.05 })
     engine.updatePositionPrice('BTC/USDT', 50000)

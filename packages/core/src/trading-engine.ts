@@ -52,9 +52,16 @@ export class TradingEngine {
     this.currentUtcDay = new Date().getUTCDate()
   }
 
+  private currentEquity(): number {
+    const openValue = this.positions.getAll().reduce((sum, p) => {
+      return sum + (p.entryPrice > 0 ? (p.size / p.entryPrice) * p.currentPrice : p.size)
+    }, 0)
+    return this.guard.availableCapital() + openValue
+  }
+
   /** Test seam: simulate crossing into a new UTC day, resetting daily loss tracking. */
   advanceDay(): void {
-    this.dailyStartCapital = this.guard.availableCapital()
+    this.dailyStartCapital = this.currentEquity()
     this.dailyRealisedPnl = 0
     this.currentUtcDay = (this.currentUtcDay % 31) + 1
   }
@@ -62,7 +69,7 @@ export class TradingEngine {
   private refreshDailyReset(): void {
     const today = new Date().getUTCDate()
     if (today !== this.currentUtcDay) {
-      this.dailyStartCapital = this.guard.availableCapital()
+      this.dailyStartCapital = this.currentEquity()
       this.dailyRealisedPnl = 0
       this.currentUtcDay = today
     }
@@ -84,8 +91,9 @@ export class TradingEngine {
         return { executed: false, reason: `Max positions reached (${this.maxPositions})` }
       }
 
-      if (this.dailyRealisedPnl < -this.dailyStartCapital * this.dailyLossLimitPct) {
-        const lossPct = (-this.dailyRealisedPnl / this.dailyStartCapital * 100).toFixed(1)
+      const dailyDrawdown = this.dailyStartCapital - this.currentEquity()
+      if (dailyDrawdown > this.dailyStartCapital * this.dailyLossLimitPct) {
+        const lossPct = (dailyDrawdown / this.dailyStartCapital * 100).toFixed(1)
         return { executed: false, reason: `Daily loss limit hit: lost ${lossPct}% today` }
       }
 
