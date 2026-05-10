@@ -27,6 +27,7 @@ describe('LLM integration smoke test', () => {
         size: 50,
         confidence: 0.9,
         reasoning: 'stub decision',
+        stopLoss: 40,
       }),
     }
 

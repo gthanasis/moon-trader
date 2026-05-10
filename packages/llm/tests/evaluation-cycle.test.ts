@@ -27,8 +27,8 @@ const mockEngine = {
 const emptySnapshot = { timestamp: new Date(), signals: [], ohlcv: {} }
 
 const holdDecision: LLMDecision = { action: 'hold', coin: '', size: 0, confidence: 0.5, reasoning: 'uncertain' }
-const buySmall: LLMDecision = { action: 'buy', coin: 'BTC/USDT', size: 30, confidence: 0.9, reasoning: 'strong' }
-const buyLarge: LLMDecision = { action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'strong' }
+const buySmall: LLMDecision = { action: 'buy', coin: 'BTC/USDT', size: 30, confidence: 0.9, reasoning: 'strong', stopLoss: 25 }
+const buyLarge: LLMDecision = { action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'strong', stopLoss: 25 }
 
 describe('EvaluationCycle', () => {
   beforeEach(() => {
@@ -154,13 +154,14 @@ describe('EvaluationCycle — risk-based sizing (Task 5)', () => {
     expect(mockExecute).not.toHaveBeenCalled()
   })
 
-  it('passes LLM size through unchanged when no stopLoss provided', async () => {
+  it('rejects buy when no stop-loss is provided', async () => {
     mockFetch.mockResolvedValue(snapshotWith(50000))
     mockDecide.mockResolvedValue({ action: 'buy', coin: 'BTC/USDT', size: 75, confidence: 0.9, reasoning: 'r' })
     const cycle = new EvaluationCycle({ pipeline: mockPipeline as any, adapter: mockAdapter, engine: mockEngine as any, autoTradeLimit: 500, riskPerTradePct: 0.01 })
-    await cycle.run()
-    const executedDecision = mockExecute.mock.calls[0][0] as LLMDecision
-    expect(executedDecision.size).toBe(75)
+    const result = await cycle.run()
+    expect(result.executed).toBe(false)
+    expect(result.reason).toMatch(/stop.?loss/i)
+    expect(mockExecute).not.toHaveBeenCalled()
   })
 
   it('preserves original LLM size in result.decision when risk sizing overrides it', async () => {
@@ -200,7 +201,7 @@ describe('EvaluationCycle — confidence threshold (Task 6)', () => {
   })
 
   it('allows decision exactly at the confidence threshold', async () => {
-    mockDecide.mockResolvedValue({ action: 'buy', coin: 'BTC/USDT', size: 100, confidence: 0.6, reasoning: 'ok' })
+    mockDecide.mockResolvedValue({ action: 'buy', coin: 'BTC/USDT', size: 100, confidence: 0.6, reasoning: 'ok', stopLoss: 50 })
     const cycle = new EvaluationCycle({ pipeline: mockPipeline as any, adapter: mockAdapter, engine: mockEngine as any, autoTradeLimit: 500, minConfidence: 0.6 })
     const result = await cycle.run()
     expect(result.executed).toBe(true)

@@ -101,6 +101,11 @@ export class EvaluationCycle {
       return { decision, executedDecision, executed: false, reason: `Confidence ${decision.confidence.toFixed(2)} below threshold ${minConfidence}` }
     }
 
+    // Hard-reject buys without a stop-loss — the system prompt mandates one, this enforces it.
+    if (decision.action === 'buy' && decision.stopLoss === undefined) {
+      return { decision, executedDecision, executed: false, reason: 'buy rejected: no stop-loss provided' }
+    }
+
     // Risk-based sizing for buys with a stop-loss.
     if (decision.action === 'buy' && decision.stopLoss !== undefined) {
       const candles = snapshot.ohlcv[decision.coin]

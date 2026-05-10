@@ -20,7 +20,7 @@ describe('BacktestRunner integration', () => {
     const adapter = {
       decide: async (): Promise<LLMDecision> => {
         callCount++
-        if (callCount === 1) return { action: 'buy', coin: 'BTC', size: 200, confidence: 0.8, reasoning: 'test buy' }
+        if (callCount === 1) return { action: 'buy', coin: 'BTC', size: 200, confidence: 0.8, reasoning: 'test buy', stopLoss: 150 }
         if (callCount === 3) return { action: 'sell', coin: 'BTC', size: 200, confidence: 0.8, reasoning: 'test sell' }
         return { action: 'hold', coin: 'BTC', size: 0, confidence: 0.5, reasoning: 'hold' }
       },
@@ -46,10 +46,14 @@ describe('BacktestRunner integration', () => {
 
     expect(result.trades.length).toBeGreaterThan(0)
     expect(result.pnlCurve.length).toBeGreaterThan(0)
+    expect(result.stats.initialCapital).toBe(1000)
     expect(result.stats.totalTrades).toBe(result.trades.length)
     expect(result.stats.winRate).toBeGreaterThanOrEqual(0)
     expect(result.stats.winRate).toBeLessThanOrEqual(1)
     expect(result.stats.maxDrawdown).toBeGreaterThanOrEqual(0)
-    expect(result.pnlCurve[0].capital).toBeCloseTo(1000, -1)
+    // Final capital should be in a reasonable range of initial (not NaN, not 0, not wildly off)
+    const finalCapital = result.pnlCurve.at(-1)!.capital
+    expect(finalCapital).toBeGreaterThan(0)
+    expect(finalCapital).toBeLessThan(10_000)
   })
 })

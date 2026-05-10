@@ -53,7 +53,7 @@ describe('BacktestRunner', () => {
       decide: vi.fn(async (): Promise<LLMDecision> => {
         callCount++
         if (callCount === 1) {
-          return { action: 'buy', coin: 'BTC', size: 100, confidence: 0.9, reasoning: 'bullish' }
+          return { action: 'buy', coin: 'BTC', size: 100, confidence: 0.9, reasoning: 'bullish', stopLoss: 80 }
         }
         return { action: 'hold', coin: 'BTC', size: 0, confidence: 0.5, reasoning: 'hold' }
       }),
@@ -89,7 +89,7 @@ describe('BacktestRunner', () => {
       decide: vi.fn(async (): Promise<LLMDecision> => {
         callCount++
         if (callCount === 1) {
-          return { action: 'buy', coin: 'BTC', size: 100, confidence: 0.9, reasoning: 'buy' }
+          return { action: 'buy', coin: 'BTC', size: 100, confidence: 0.9, reasoning: 'buy', stopLoss: 80 }
         }
         if (callCount === 2) {
           return { action: 'sell', coin: 'BTC', size: 100, confidence: 0.9, reasoning: 'sell' }
@@ -188,7 +188,7 @@ describe('BacktestRunner', () => {
     const adapter = {
       decide: vi.fn(async (): Promise<LLMDecision> => {
         callCount++
-        if (callCount === 1) return { action: 'buy', coin: 'BTC', size: 100, confidence: 0.9, reasoning: 'buy' }
+        if (callCount === 1) return { action: 'buy', coin: 'BTC', size: 100, confidence: 0.9, reasoning: 'buy', stopLoss: 80 }
         if (callCount === 2) return { action: 'sell', coin: 'BTC', size: 100, confidence: 0.9, reasoning: 'sell' }
         return { action: 'hold', coin: 'BTC', size: 0, confidence: 0.5, reasoning: 'hold' }
       }),
@@ -229,7 +229,7 @@ describe('BacktestRunner', () => {
     const adapter = {
       decide: vi.fn(async (): Promise<LLMDecision> => {
         callCount++
-        if (callCount === 1) return { action: 'buy', coin: 'BTC', size: 100, confidence: 0.9, reasoning: 'buy', takeProfit: 115 }
+        if (callCount === 1) return { action: 'buy', coin: 'BTC', size: 100, confidence: 0.9, reasoning: 'buy', takeProfit: 115, stopLoss: 80 }
         return { action: 'hold', coin: 'BTC', size: 0, confidence: 0.5, reasoning: 'hold' }
       }),
     }
@@ -266,7 +266,7 @@ describe('BacktestRunner', () => {
   it('skips buy when no fill price is available', async () => {
     const adapter = {
       decide: vi.fn(async (): Promise<LLMDecision> => ({
-        action: 'buy', coin: 'BTC', size: 100, confidence: 0.9, reasoning: 'buy',
+        action: 'buy', coin: 'BTC', size: 100, confidence: 0.9, reasoning: 'buy', stopLoss: 80,
       })),
     }
 
@@ -351,7 +351,7 @@ describe('BacktestRunner — parity with live risk caps', () => {
     const adapter = { decide: vi.fn(async (): Promise<LLMDecision> => {
       calls++
       // Two consecutive buys on BTC — second must be rejected
-      if (calls <= 2) return { action: 'buy', coin: 'BTC', size: 100, confidence: 0.9, reasoning: 'buy' }
+      if (calls <= 2) return { action: 'buy', coin: 'BTC', size: 100, confidence: 0.9, reasoning: 'buy', stopLoss: 80 }
       return { action: 'hold', coin: '', size: 0, confidence: 0.5, reasoning: 'hold' }
     }) }
 
@@ -376,7 +376,7 @@ describe('BacktestRunner — parity with live risk caps', () => {
     const adapter = { decide: vi.fn(async (): Promise<LLMDecision> => {
       const coin = coins[calls] ?? 'DOGE'
       calls++
-      if (calls <= coins.length) return { action: 'buy', coin, size: 50, confidence: 0.9, reasoning: 'b' }
+      if (calls <= coins.length) return { action: 'buy', coin, size: 50, confidence: 0.9, reasoning: 'b', stopLoss: 45 }
       return { action: 'hold', coin: '', size: 0, confidence: 0.5, reasoning: 'h' }
     }) }
 
@@ -441,8 +441,8 @@ describe('BacktestRunner — parity with live risk caps', () => {
     let calls = 0
     const adapter = { decide: vi.fn(async (): Promise<LLMDecision> => {
       calls++
-      if (calls === 1) return { action: 'buy', coin: 'BTC', size: 300, confidence: 0.9, reasoning: 'buy1' }
-      if (calls === 2) return { action: 'buy', coin: 'ETH', size: 50, confidence: 0.9, reasoning: 'buy2' }
+      if (calls === 1) return { action: 'buy', coin: 'BTC', size: 300, confidence: 0.9, reasoning: 'buy1', stopLoss: 80 }
+      if (calls === 2) return { action: 'buy', coin: 'ETH', size: 50, confidence: 0.9, reasoning: 'buy2', stopLoss: 8 }
       return { action: 'hold', coin: '', size: 0, confidence: 0.5, reasoning: 'hold' }
     }) }
 

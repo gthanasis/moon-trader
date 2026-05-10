@@ -84,7 +84,7 @@ export function buildPrompt(context: TradingContext): { system: string; user: st
 - Only trade top-tier cryptocurrencies (BTC/USDT, ETH/USDT, BNB/USDT, SOL/USDT, XRP/USDT, ADA/USDT, DOGE/USDT, AVAX/USDT, DOT/USDT, MATIC/USDT)
 - The engine enforces a minimum confidence threshold before executing buys; when uncertain, choose hold
 - Position sizing is enforced by the engine based on risk parameters
-- Always include a stop-loss level for buy orders
+- Always include a stop-loss level for buy orders (the engine enforces this — buys without one are rejected)
 - Consider macro conditions — avoid buying during extreme fear unless signal is very strong
 - When uncertain, choose hold
 
