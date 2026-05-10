@@ -37,6 +37,21 @@ export class TradeRepository {
     })
     return rows.map(toDomainTrade)
   }
+
+  async findOpenTradeByCoin(coin: string): Promise<Trade | null> {
+    const row = await this.prisma.trade.findFirst({
+      where: { coin, closedAt: null },
+      orderBy: { openedAt: 'desc' },
+    })
+    return row ? toDomainTrade(row) : null
+  }
+
+  async closeTrade(id: string, data: { exitPrice: number; closedAt: Date; pnl: number }): Promise<void> {
+    await this.prisma.trade.update({
+      where: { id },
+      data: { exitPrice: data.exitPrice, closedAt: data.closedAt, pnl: data.pnl },
+    })
+  }
 }
 
 function toDomainTrade(row: {

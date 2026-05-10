@@ -12,3 +12,4 @@ build/
 *~
 .turbo/
 .next/
+.trader.pid

@@ -4,6 +4,14 @@ import { CapitalGuard } from './capital-guard.js'
 import { PositionTracker } from './position-tracker.js'
 import { OrderManager } from './order-manager.js'
 
+export interface PositionClosedEvent {
+  coin: string
+  fillPrice: number
+  /** Net PnL after fees (negative = loss). */
+  pnl: number
+  reason: 'sell' | 'stop' | 'takeprofit'
+}
+
 interface TradingEngineConfig {
   totalCapital: number
   paper: boolean
@@ -16,6 +24,8 @@ interface TradingEngineConfig {
   feeRate?: number
   /** Slippage in basis points applied to paper fills. Default: 0. */
   slippageBps?: number
+  /** Called whenever a position is closed, from both LLM sell decisions and stop/TP exits. */
+  onPositionClosed?: (event: PositionClosedEvent) => void | Promise<void>
 }
 
 interface ExecuteResult {
@@ -37,6 +47,7 @@ export class TradingEngine {
   private readonly maxPositions: number
   private readonly dailyLossLimitPct: number
   private readonly feeRate: number
+  private readonly onPositionClosed: ((event: PositionClosedEvent) => void | Promise<void>) | undefined
   private dailyStartCapital: number
   private currentUtcDay: number
 
@@ -47,6 +58,7 @@ export class TradingEngine {
     this.maxPositions = config.maxPositions ?? 5
     this.dailyLossLimitPct = config.dailyLossLimitPct ?? 0.05
     this.feeRate = config.feeRate ?? 0
+    this.onPositionClosed = config.onPositionClosed
     this.currentUtcDay = Math.floor(Date.now() / 86400000)
     this.dailyStartCapital = this.currentEquity()
   }
@@ -149,10 +161,12 @@ export class TradingEngine {
           : position.size
         const sellFee = grossProceeds * this.feeRate
         const netProceeds = grossProceeds - sellFee
+        const pnl = netProceeds - position.size
         this.positions.close(decision.coin)
         this.baseQty.delete(decision.coin)
         this.currentPrices.delete(decision.coin)
         this.guard.releaseWithProceeds(position.size, netProceeds)
+        await this.onPositionClosed?.({ coin: decision.coin, fillPrice: order.fillPrice ?? position.currentPrice, pnl, reason: 'sell' })
       }
 
       return { executed: true, order }
@@ -200,15 +214,19 @@ export class TradingEngine {
         baseQty: this.baseQty.get(current.coin),
       })
       if (order.status === 'filled') {
+        const fillPrice = order.fillPrice ?? price
         const grossProceeds = current.entryPrice > 0
-          ? (current.size / current.entryPrice) * (order.fillPrice ?? price)
+          ? (current.size / current.entryPrice) * fillPrice
           : current.size
         const netProceeds = grossProceeds * (1 - this.feeRate)
+        const pnl = netProceeds - current.size
+        const reason: PositionClosedEvent['reason'] = hitTakeProfit ? 'takeprofit' : 'stop'
         this.positions.close(current.coin)
         this.highWaterMarks.delete(current.coin)
         this.baseQty.delete(current.coin)
         this.currentPrices.delete(current.coin)
         this.guard.releaseWithProceeds(current.size, netProceeds)
+        await this.onPositionClosed?.({ coin: current.coin, fillPrice, pnl, reason })
       }
     }
   }

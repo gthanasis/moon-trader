@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto'
+import { writeFileSync, unlinkSync } from 'fs'
 import ccxt from 'ccxt'
 import { ClaudeAdapter, OpenAIAdapter, EvaluationCycle } from '@trader/llm'
 import { TradingEngine, CcxtExchangeAdapter } from '@trader/core'
@@ -7,6 +8,8 @@ import { getPrismaClient, TradeRepository, DecisionRepository, SignalRepository,
 import { startBot } from '@trader/bot'
 import { Scheduler } from './scheduler.js'
 import type { LiveConfig } from './config.js'
+
+const PID_FILE = '.trader.pid'
 
 export interface LiveTraderHandle {
   stop(): void
@@ -71,6 +74,17 @@ export function startLiveTrader(config: LiveConfig): LiveTraderHandle {
     dailyLossLimitPct: config.dailyLossLimitPct,
     feeRate: config.feeRate,
     slippageBps: config.slippageBps,
+    onPositionClosed: async ({ coin, fillPrice, pnl, reason }) => {
+      try {
+        const openTrade = await tradeRepo.findOpenTradeByCoin(coin)
+        if (openTrade) {
+          await tradeRepo.closeTrade(openTrade.id, { exitPrice: fillPrice, closedAt: new Date(), pnl })
+          console.log(`[LiveTrader] Closed ${coin} trade ${openTrade.id} via ${reason}: fillPrice=${fillPrice} pnl=${pnl.toFixed(2)}`)
+        }
+      } catch (err) {
+        console.error('[LiveTrader] Failed to persist position close:', err)
+      }
+    },
   })
 
   const llmAdapter =
@@ -109,20 +123,24 @@ export function startLiveTrader(config: LiveConfig): LiveTraderHandle {
   const persistingCycle = {
     run: async () => {
       const result = await cycle.run()
-      console.log(`[Cycle] ${new Date().toISOString()} — ${result.decision.action.toUpperCase()} ${result.decision.coin} confidence=${result.decision.confidence.toFixed(2)} executed=${result.executed} ${result.reason ?? ''}`.trimEnd())
+      const status = result.executed ? 'executed' : 'blocked'
+      console.log(`[Cycle] ${new Date().toISOString()} — ${result.decision.action.toUpperCase()} ${result.decision.coin} confidence=${result.decision.confidence.toFixed(2)} ${status} ${result.reason ?? ''}`.trimEnd())
 
-      const decisionId = await decisionRepo.saveDecision(result.decision).catch(err => {
+      // Persist the LLM's raw decision with its actual execution status.
+      const decisionId = await decisionRepo.saveDecision(result.decision, status).catch(err => {
         console.error('[LiveTrader] Failed to persist decision:', err)
         return null
       })
 
-      if (result.executed && result.decision.action === 'buy' && decisionId) {
-        const position = engine.getPositions().find(p => p.coin === result.decision.coin)
+      // Persist a new open trade row when a buy fills.
+      // Sells and stop/TP exits are persisted via engine.onPositionClosed (fires immediately on close).
+      if (result.executed && result.executedDecision.action === 'buy' && decisionId) {
+        const position = engine.getPositions().find(p => p.coin === result.executedDecision.coin)
         const trade = {
           id: randomUUID(),
-          coin: result.decision.coin,
+          coin: result.executedDecision.coin,
           side: 'buy' as const,
-          size: result.decision.size,
+          size: position?.size ?? result.executedDecision.size,
           entryPrice: position?.entryPrice ?? 0,
           openedAt: new Date(),
           reasoning: result.decision.reasoning,
@@ -141,15 +159,19 @@ export function startLiveTrader(config: LiveConfig): LiveTraderHandle {
   const scheduler = new Scheduler(persistingCycle, config.cronExpression)
   scheduler.start()
 
+  try { writeFileSync(PID_FILE, String(process.pid)) } catch { /* ignore */ }
+
   console.log(
-    `[LiveTrader] Started. paper=${config.paper}, coins=${config.coins.join(',')}, cron="${config.cronExpression}"`,
+    `[LiveTrader] Started. PID=${process.pid} paper=${config.paper}, coins=${config.coins.join(',')}, cron="${config.cronExpression}"`,
     botHandle ? '| Telegram bot active' : '| Telegram bot disabled',
   )
+  console.log(`[LiveTrader] To stop: kill $(cat ${PID_FILE})  — or send SIGTERM/SIGINT`)
 
   return {
     stop: () => {
       scheduler.stop()
       botHandle?.stop()
+      try { unlinkSync(PID_FILE) } catch { /* ignore */ }
     },
   }
 }
