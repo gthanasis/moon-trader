@@ -33,6 +33,7 @@ export class TradingEngine {
   private readonly orders: OrderManager
   private readonly currentPrices = new Map<string, number>()
   private readonly highWaterMarks = new Map<string, number>()
+  private readonly baseQty = new Map<string, number>()
   private readonly maxPositions: number
   private readonly dailyLossLimitPct: number
   private readonly feeRate: number
@@ -109,6 +110,7 @@ export class TradingEngine {
         }
         const buyFee = decision.size * this.feeRate
         this.guard.reserve(decision.size + buyFee)
+        this.baseQty.set(decision.coin, decision.size / order.fillPrice)
         this.positions.open({
           coin: decision.coin,
           size: decision.size,
@@ -128,23 +130,23 @@ export class TradingEngine {
         return { executed: false, reason: `No open position for ${decision.coin}` }
       }
 
-      // currentPrice must be kept up-to-date via PositionTracker before execute() is called;
-      // it is used only to compute the base amount for the live sell, not as an actual order price
       const order = await this.orders.place({
         coin: decision.coin,
         side: 'sell',
-        size: decision.size,
+        size: position.size,
         price: position.currentPrice,
+        baseQty: this.baseQty.get(decision.coin),
       })
 
       if (order.status === 'filled') {
         const grossProceeds = position.entryPrice > 0
           ? (position.size / position.entryPrice) * (order.fillPrice ?? position.currentPrice)
-          : decision.size
+          : position.size
         const sellFee = grossProceeds * this.feeRate
         const netProceeds = grossProceeds - sellFee
         this.dailyRealisedPnl += netProceeds - position.size
         this.positions.close(decision.coin)
+        this.baseQty.delete(decision.coin)
         this.guard.releaseWithProceeds(position.size, netProceeds)
       }
 
@@ -189,6 +191,7 @@ export class TradingEngine {
         side: 'sell',
         size: current.size,
         price,
+        baseQty: this.baseQty.get(current.coin),
       })
       if (order.status === 'filled') {
         const grossProceeds = current.entryPrice > 0
@@ -198,6 +201,7 @@ export class TradingEngine {
         this.dailyRealisedPnl += netProceeds - current.size
         this.positions.close(current.coin)
         this.highWaterMarks.delete(current.coin)
+        this.baseQty.delete(current.coin)
         this.guard.releaseWithProceeds(current.size, netProceeds)
       }
     }

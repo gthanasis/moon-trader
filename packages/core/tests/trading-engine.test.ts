@@ -297,9 +297,9 @@ describe('TradingEngine daily loss circuit breaker', () => {
 })
 
 describe('TradingEngine live mode', () => {
-  it('passes currentPrice to OrderManager when selling live', async () => {
+  it('passes baseQty from entry fill to marketSell — not size/currentPrice', async () => {
     const sellSpy = vi.fn(async (): Promise<ExecutedOrder> => ({
-      orderId: 'sell-1', fillPrice: 51000, filledAt: new Date(), baseAmount: 0.004,
+      orderId: 'sell-1', fillPrice: 60000, filledAt: new Date(), baseAmount: 0.004,
     }))
     const exchange: ExchangeAdapter = {
       marketBuy: vi.fn(async (): Promise<ExecutedOrder> => ({
@@ -309,14 +309,39 @@ describe('TradingEngine live mode', () => {
     }
     const engine = new TradingEngine({ totalCapital: 1000, paper: false, exchange })
 
-    // First buy to open a position
+    // Buy at 50000 → we hold 200/50000 = 0.004 BTC
     await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy' })
+
+    // Price rises to 60000 — update currentPrice so engine knows
+    engine.updatePositionPrice('BTC/USDT', 60000)
+
+    // Sell — must send 0.004 BTC (from entry), not 200/60000 = 0.00333 (from current price)
     await engine.execute({ action: 'sell', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'sell' })
 
     expect(sellSpy).toHaveBeenCalled()
-    // marketSell called with base amount = 200 / 50000 = 0.004
-    const [coin, baseAmount] = (sellSpy as ReturnType<typeof vi.fn>).mock.calls[0] as [string, number]
+    const [coin, baseAmount] = sellSpy.mock.calls[0] as [string, number]
     expect(coin).toBe('BTC/USDT')
-    expect(baseAmount).toBeCloseTo(0.004, 5)
+    expect(baseAmount).toBeCloseTo(0.004, 5) // 200 / 50000, NOT 200 / 60000
+  })
+
+  it('passes baseQty to stop-loss exits triggered by checkStopLosses', async () => {
+    const sellSpy = vi.fn(async (): Promise<ExecutedOrder> => ({
+      orderId: 'sell-1', fillPrice: 45000, filledAt: new Date(), baseAmount: 0.004,
+    }))
+    const exchange: ExchangeAdapter = {
+      marketBuy: vi.fn(async (): Promise<ExecutedOrder> => ({
+        orderId: 'buy-1', fillPrice: 50000, filledAt: new Date(), baseAmount: 0.004,
+      })),
+      marketSell: sellSpy,
+    }
+    const engine = new TradingEngine({ totalCapital: 1000, paper: false, exchange })
+
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy', stopLoss: 48000 })
+    engine.updatePositionPrice('BTC/USDT', 45000) // below stop
+    await engine.checkStopLosses()
+
+    expect(sellSpy).toHaveBeenCalled()
+    const [, baseAmount] = sellSpy.mock.calls[0] as [string, number]
+    expect(baseAmount).toBeCloseTo(0.004, 5) // 200 / 50000, not 200 / 45000
   })
 })

@@ -99,13 +99,24 @@ describe('OrderManager live mode', () => {
     expect(exchange.marketSell).toHaveBeenCalledWith('BTC/USDT', 0.004)
   })
 
-  it('throws when live sell is attempted without price', async () => {
+  it('uses baseQty directly when provided — ignores size/price arithmetic', async () => {
+    const exchange = makeMockExchange()
+    const manager = new OrderManager({ paper: false, exchange })
+
+    // Position was opened at entryPrice=50000, so baseQty=200/50000=0.004
+    // Current price is 60000 — size/price would give 200/60000=0.00333 (wrong)
+    await manager.place({ coin: 'BTC/USDT', side: 'sell', size: 200, price: 60000, baseQty: 0.004 })
+
+    expect(exchange.marketSell).toHaveBeenCalledWith('BTC/USDT', 0.004)
+  })
+
+  it('throws when live sell is attempted without price or baseQty', async () => {
     const exchange = makeMockExchange()
     const manager = new OrderManager({ paper: false, exchange })
 
     await expect(
       manager.place({ coin: 'BTC/USDT', side: 'sell', size: 200 })
-    ).rejects.toThrow('price')
+    ).rejects.toThrow(/price|baseQty/)
   })
 
   it('leaves order open when not paper and no exchange injected', async () => {

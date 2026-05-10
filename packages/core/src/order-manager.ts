@@ -7,6 +7,8 @@ interface PlaceOrderInput {
   side: OrderSide
   size: number
   price?: number
+  /** Exact base-asset quantity to sell. When provided on live sells, used instead of size/price arithmetic. */
+  baseQty?: number
 }
 
 interface OrderManagerConfig {
@@ -55,10 +57,10 @@ export class OrderManager {
         order.filledAt = result.filledAt
         order.fillPrice = result.fillPrice
       } else {
-        if (input.price === undefined) {
-          throw new Error(`price is required for live sell orders on ${input.coin}`)
+        const baseAmount = input.baseQty ?? (input.price !== undefined ? input.size / input.price : undefined)
+        if (baseAmount === undefined) {
+          throw new Error(`baseQty or price is required for live sell orders on ${input.coin}`)
         }
-        const baseAmount = input.size / input.price
         const result = await this.exchange.marketSell(input.coin, baseAmount)
         order.status = 'filled'
         order.filledAt = result.filledAt
