@@ -39,6 +39,26 @@ describe('OrderManager (paper mode)', () => {
   })
 })
 
+describe('OrderManager slippage (paper mode)', () => {
+  it('adds slippage to buy fill price (we pay more)', async () => {
+    const manager = new OrderManager({ paper: true, slippageBps: 10 })
+    const order = await manager.place({ coin: 'BTC/USDT', side: 'buy', size: 100, price: 50000 })
+    expect(order.fillPrice).toBeCloseTo(50050, 0) // 50000 * 1.001
+  })
+
+  it('subtracts slippage from sell fill price (we receive less)', async () => {
+    const manager = new OrderManager({ paper: true, slippageBps: 10 })
+    const order = await manager.place({ coin: 'BTC/USDT', side: 'sell', size: 100, price: 50000 })
+    expect(order.fillPrice).toBeCloseTo(49950, 0) // 50000 * 0.999
+  })
+
+  it('defaults to zero slippage when slippageBps is not set', async () => {
+    const manager = new OrderManager({ paper: true })
+    const order = await manager.place({ coin: 'BTC/USDT', side: 'buy', size: 100, price: 50000 })
+    expect(order.fillPrice).toBe(50000)
+  })
+})
+
 function makeMockExchange(overrides: Partial<ExchangeAdapter> = {}): ExchangeAdapter {
   return {
     marketBuy: vi.fn(async (): Promise<ExecutedOrder> => ({

@@ -12,6 +12,10 @@ interface TradingEngineConfig {
   maxPositions?: number
   /** Fraction of day-start capital that may be lost before new buys are blocked. Default: 0.05 (5%). */
   dailyLossLimitPct?: number
+  /** Fee charged on each trade as a fraction of size/proceeds. Default: 0 (no fee in paper). */
+  feeRate?: number
+  /** Slippage in basis points applied to paper fills. Default: 0. */
+  slippageBps?: number
 }
 
 interface ExecuteResult {
@@ -31,6 +35,7 @@ export class TradingEngine {
   private readonly highWaterMarks = new Map<string, number>()
   private readonly maxPositions: number
   private readonly dailyLossLimitPct: number
+  private readonly feeRate: number
   private dailyStartCapital: number
   private dailyRealisedPnl = 0
   private currentUtcDay: number
@@ -38,9 +43,10 @@ export class TradingEngine {
   constructor(config: TradingEngineConfig) {
     this.guard = new CapitalGuard({ totalCapital: config.totalCapital })
     this.positions = new PositionTracker()
-    this.orders = new OrderManager({ paper: config.paper, exchange: config.exchange })
+    this.orders = new OrderManager({ paper: config.paper, exchange: config.exchange, slippageBps: config.slippageBps })
     this.maxPositions = config.maxPositions ?? 5
     this.dailyLossLimitPct = config.dailyLossLimitPct ?? 0.05
+    this.feeRate = config.feeRate ?? 0
     this.dailyStartCapital = config.totalCapital
     this.currentUtcDay = new Date().getUTCDate()
   }
@@ -101,7 +107,8 @@ export class TradingEngine {
           console.error(`[TradingEngine] Invalid fill price for ${decision.coin}: ${order.fillPrice}`)
           return { executed: false, reason: `Invalid fill price for ${decision.coin}` }
         }
-        this.guard.reserve(decision.size)
+        const buyFee = decision.size * this.feeRate
+        this.guard.reserve(decision.size + buyFee)
         this.positions.open({
           coin: decision.coin,
           size: decision.size,
@@ -131,12 +138,14 @@ export class TradingEngine {
       })
 
       if (order.status === 'filled') {
-        const proceeds = position.entryPrice > 0
+        const grossProceeds = position.entryPrice > 0
           ? (position.size / position.entryPrice) * (order.fillPrice ?? position.currentPrice)
           : decision.size
-        this.dailyRealisedPnl += proceeds - position.size
+        const sellFee = grossProceeds * this.feeRate
+        const netProceeds = grossProceeds - sellFee
+        this.dailyRealisedPnl += netProceeds - position.size
         this.positions.close(decision.coin)
-        this.guard.releaseWithProceeds(position.size, proceeds)
+        this.guard.releaseWithProceeds(position.size, netProceeds)
       }
 
       return { executed: true, order }
@@ -182,13 +191,14 @@ export class TradingEngine {
         price,
       })
       if (order.status === 'filled') {
-        const proceeds = current.entryPrice > 0
+        const grossProceeds = current.entryPrice > 0
           ? (current.size / current.entryPrice) * (order.fillPrice ?? price)
           : current.size
-        this.dailyRealisedPnl += proceeds - current.size
+        const netProceeds = grossProceeds * (1 - this.feeRate)
+        this.dailyRealisedPnl += netProceeds - current.size
         this.positions.close(current.coin)
         this.highWaterMarks.delete(current.coin)
-        this.guard.releaseWithProceeds(current.size, proceeds)
+        this.guard.releaseWithProceeds(current.size, netProceeds)
       }
     }
   }

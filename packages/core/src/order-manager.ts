@@ -12,16 +12,20 @@ interface PlaceOrderInput {
 interface OrderManagerConfig {
   paper: boolean
   exchange?: ExchangeAdapter
+  /** Slippage applied to paper fills in basis points (1 bps = 0.01%). Default: 0. */
+  slippageBps?: number
 }
 
 export class OrderManager {
   private readonly paper: boolean
   private readonly exchange?: ExchangeAdapter
+  private readonly slippageBps: number
   private orders = new Map<string, Order>()
 
   constructor(config: OrderManagerConfig) {
     this.paper = config.paper
     this.exchange = config.exchange
+    this.slippageBps = config.slippageBps ?? 0
   }
 
   async place(input: PlaceOrderInput): Promise<Order> {
@@ -38,7 +42,12 @@ export class OrderManager {
     if (this.paper) {
       order.status = 'filled'
       order.filledAt = new Date()
-      order.fillPrice = input.price
+      const slip = this.slippageBps / 10000
+      order.fillPrice = input.price !== undefined
+        ? input.side === 'buy'
+          ? input.price * (1 + slip)
+          : input.price * (1 - slip)
+        : input.price
     } else if (this.exchange) {
       if (input.side === 'buy') {
         const result = await this.exchange.marketBuy(input.coin, input.size)

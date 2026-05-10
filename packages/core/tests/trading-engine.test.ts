@@ -120,6 +120,34 @@ describe('TradingEngine', () => {
   })
 })
 
+describe('TradingEngine fees', () => {
+  it('deducts buy fee from available capital', async () => {
+    const engine = new TradingEngine({ totalCapital: 1000, paper: true, feeRate: 0.001 })
+    engine.updatePositionPrice('BTC/USDT', 50000)
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy' })
+    // capital = 1000 - 200 (size) - 0.2 (fee) = 799.8
+    expect(engine.availableCapital()).toBeCloseTo(799.8, 1)
+  })
+
+  it('deducts sell fee from proceeds', async () => {
+    const engine = new TradingEngine({ totalCapital: 1000, paper: true, feeRate: 0.001 })
+    engine.updatePositionPrice('BTC/USDT', 50000)
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy' })
+    // After buy: capital ≈ 799.8; sell at same price → proceeds = 200, fee = 0.2
+    engine.updatePositionPrice('BTC/USDT', 50000)
+    await engine.execute({ action: 'sell', coin: 'BTC/USDT', size: 200, confidence: 0.8, reasoning: 'sell' })
+    // Net: started 1000, paid 0.2 buy fee + 0.2 sell fee = 999.6
+    expect(engine.availableCapital()).toBeCloseTo(999.6, 1)
+  })
+
+  it('defaults to zero fees when feeRate is not set', async () => {
+    const engine = new TradingEngine({ totalCapital: 1000, paper: true })
+    engine.updatePositionPrice('BTC/USDT', 50000)
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy' })
+    expect(engine.availableCapital()).toBe(800)
+  })
+})
+
 describe('TradingEngine.checkStopLosses', () => {
   let engine: TradingEngine
 
