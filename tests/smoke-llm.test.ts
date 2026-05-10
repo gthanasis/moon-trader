@@ -32,6 +32,7 @@ describe('LLM integration smoke test', () => {
 
     const pipeline = new Pipeline({ sources: [new NullDataSource()] })
     const engine = new TradingEngine({ totalCapital: 500, paper: true })
+    engine.updatePositionPrice('BTC/USDT', 50000)
 
     const cycle = new EvaluationCycle({
       pipeline,

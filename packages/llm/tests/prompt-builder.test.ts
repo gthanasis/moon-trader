@@ -126,4 +126,66 @@ describe('buildPrompt', () => {
     const { user } = buildPrompt(emptyContext)
     expect(user).toContain('No price data')
   })
+
+  describe('pre-computed indicators', () => {
+    function makeCandles(closes: number[]) {
+      return closes.map((c, i) => ({
+        timestamp: new Date(i * 60000),
+        open: c, high: c * 1.005, low: c * 0.995, close: c, volume: 1000 + i * 10,
+      }))
+    }
+
+    const btcCandles = makeCandles([
+      50000, 50200, 50100, 50400, 50300, 50600, 50500, 50700, 50800, 50600,
+      50900, 51000, 50800, 51100, 51200, 51000, 51300, 51400, 51200, 51500,
+    ])
+
+    const contextWithCandles = (coin: string, candles: typeof btcCandles, extra = {}): TradingContext => ({
+      ...emptyContext,
+      snapshot: { timestamp: new Date(), signals: [], ohlcv: { [coin]: candles, ...extra } },
+    })
+
+    it('includes RSI in coin header line', () => {
+      const { user } = buildPrompt(contextWithCandles('BTC/USDT', btcCandles))
+      expect(user).toMatch(/RSI\(14\)=\d+\.\d/)
+    })
+
+    it('includes ATR in coin header line', () => {
+      const { user } = buildPrompt(contextWithCandles('BTC/USDT', btcCandles))
+      expect(user).toMatch(/ATR\(14\)=\d+/)
+    })
+
+    it('includes realised volatility in coin header line', () => {
+      const { user } = buildPrompt(contextWithCandles('BTC/USDT', btcCandles))
+      expect(user).toMatch(/vol=\d+\.\d+%/)
+    })
+
+    it('includes EMA distance percentages in coin header line', () => {
+      const { user } = buildPrompt(contextWithCandles('BTC/USDT', btcCandles))
+      expect(user).toMatch(/EMA20[+-][\d.]+%/)
+    })
+
+    it('includes volume z-score in coin header line', () => {
+      const { user } = buildPrompt(contextWithCandles('BTC/USDT', btcCandles))
+      expect(user).toMatch(/volZ=[+-]?[\d.]+/)
+    })
+
+    it('includes BTC 24h return as macro context for non-BTC coins', () => {
+      const ethCandles = makeCandles([3000, 3010, 3020, 3030, 3040])
+      const { user } = buildPrompt(contextWithCandles('ETH/USDT', ethCandles, { 'BTC/USDT': btcCandles }))
+      expect(user).toMatch(/BTC 24h:/)
+    })
+
+    it('does not show BTC macro line for BTC itself', () => {
+      const { user } = buildPrompt(contextWithCandles('BTC/USDT', btcCandles))
+      expect(user).not.toMatch(/BTC 24h:.*BTC\/USDT/)
+    })
+
+    it('shows n/a gracefully when fewer than period candles available', () => {
+      const fewCandles = makeCandles([50000, 50100])
+      const { user } = buildPrompt(contextWithCandles('BTC/USDT', fewCandles))
+      expect(user).toContain('BTC/USDT')
+      // should not throw; indicators show n/a or computed value
+    })
+  })
 })

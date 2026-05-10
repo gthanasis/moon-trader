@@ -1,11 +1,84 @@
-import type { TradingContext } from '@trader/shared'
+import type { TradingContext, Candle } from '@trader/shared'
+
+function ema(values: number[], period: number): number {
+  if (values.length === 0) return 0
+  const k = 2 / (period + 1)
+  let result = values[0]
+  for (let i = 1; i < values.length; i++) result = values[i] * k + result * (1 - k)
+  return result
+}
+
+function rsi(closes: number[], period = 14): number {
+  if (closes.length < period + 1) return 50
+  let gains = 0, losses = 0
+  for (let i = closes.length - period; i < closes.length; i++) {
+    const delta = closes[i] - closes[i - 1]
+    if (delta > 0) gains += delta
+    else losses -= delta
+  }
+  if (losses === 0) return 100
+  const rs = gains / losses
+  return 100 - 100 / (1 + rs)
+}
+
+function atr(candles: Candle[], period = 14): number {
+  if (candles.length < 2) return 0
+  const trs: number[] = []
+  for (let i = 1; i < candles.length; i++) {
+    const c = candles[i], prev = candles[i - 1]
+    trs.push(Math.max(c.high - c.low, Math.abs(c.high - prev.close), Math.abs(c.low - prev.close)))
+  }
+  const slice = trs.slice(-period)
+  return slice.reduce((a, b) => a + b, 0) / slice.length
+}
+
+function realisedVol(closes: number[], period = 20): number {
+  if (closes.length < period + 1) return 0
+  const slice = closes.slice(-period - 1)
+  const logReturns = slice.slice(1).map((c, i) => Math.log(c / slice[i]))
+  const mean = logReturns.reduce((a, b) => a + b, 0) / logReturns.length
+  const variance = logReturns.reduce((a, b) => a + (b - mean) ** 2, 0) / (logReturns.length - 1)
+  return Math.sqrt(variance * 365 * 24 * 60) // annualised from per-bar
+}
+
+function volZScore(volumes: number[], period = 20): number {
+  if (volumes.length < period + 1) return 0
+  const slice = volumes.slice(-period)
+  const mean = slice.reduce((a, b) => a + b, 0) / slice.length
+  const std = Math.sqrt(slice.reduce((a, b) => a + (b - mean) ** 2, 0) / slice.length)
+  if (std === 0) return 0
+  return (volumes[volumes.length - 1] - mean) / std
+}
+
+function computeIndicators(candles: Candle[]): string {
+  if (candles.length < 2) return 'insufficient data'
+  const closes = candles.map(c => c.close)
+  const volumes = candles.map(c => c.volume)
+  const lastClose = closes[closes.length - 1]
+
+  const rsi14 = rsi(closes).toFixed(1)
+
+  const ema20val = ema(closes.slice(-20), 20)
+  const ema50val = ema(closes.slice(-50), 50)
+  const ema20dist = ((lastClose - ema20val) / ema20val * 100)
+  const ema50dist = ((lastClose - ema50val) / ema50val * 100)
+  const ema20str = `EMA20${ema20dist >= 0 ? '+' : ''}${ema20dist.toFixed(1)}%`
+  const ema50str = `EMA50${ema50dist >= 0 ? '+' : ''}${ema50dist.toFixed(1)}%`
+
+  const atr14 = atr(candles).toFixed(1)
+  const vol = (realisedVol(closes) * 100).toFixed(1)
+  const volZ = volZScore(volumes).toFixed(2)
+  const trend = ema20val > ema50val ? 'bullish' : 'bearish'
+
+  return `RSI(14)=${rsi14} ATR(14)=${atr14} vol=${vol}% ${ema20str} ${ema50str} trend=${trend} volZ=${volZ}`
+}
 
 export function buildPrompt(context: TradingContext): { system: string; user: string } {
   const system = `You are a professional crypto trading assistant. Analyze market conditions and make precise, disciplined trading decisions.
 
 ## Strategy Guidelines
 - Only trade top-tier cryptocurrencies (BTC/USDT, ETH/USDT, BNB/USDT, SOL/USDT, XRP/USDT, ADA/USDT, DOGE/USDT, AVAX/USDT, DOT/USDT, MATIC/USDT)
-- Only buy when confidence > 0.7
+- Only buy when confidence > 0.6
 - Never risk more than 20% of available capital on a single trade
 - Always include a stop-loss level for buy orders
 - Consider macro conditions — avoid buying during extreme fear unless signal is very strong
@@ -23,15 +96,25 @@ Use the make_trading_decision tool to submit exactly one decision per analysis c
         })
         .join('\n')
 
+  const btcCandles = context.snapshot.ohlcv['BTC/USDT']
+  const btcMacro = (() => {
+    if (!btcCandles || btcCandles.length < 2) return null
+    const first = btcCandles[0].close, last = btcCandles[btcCandles.length - 1].close
+    const pct = ((last - first) / first * 100)
+    return `BTC 24h: ${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`
+  })()
+
   const ohlcvLines = Object.keys(context.snapshot.ohlcv).length === 0
     ? 'No price data available'
     : Object.entries(context.snapshot.ohlcv)
         .map(([coin, candles]) => {
-          const recent = candles.slice(-3)
+          const recent = candles.slice(-20)
           const rows = recent
             .map(c => `  ${c.timestamp.toISOString()} O:${c.open} H:${c.high} L:${c.low} C:${c.close} V:${c.volume.toFixed(0)}`)
             .join('\n')
-          return `${coin} (last ${recent.length}):\n${rows}`
+          const indicators = computeIndicators(candles)
+          const macro = coin !== 'BTC/USDT' && btcMacro ? `  [${btcMacro}]\n` : ''
+          return `${coin} — ${indicators}\n${macro}${rows}`
         })
         .join('\n\n')
 

@@ -14,6 +14,7 @@ describe('Integration smoke test', () => {
 
   it('TradingEngine executes a buy in paper mode given a WorldSnapshot', async () => {
     const engine = new TradingEngine({ totalCapital: 500, paper: true })
+    engine.updatePositionPrice('BTC/USDT', 50000)
 
     const result = await engine.execute({
       action: 'buy',
