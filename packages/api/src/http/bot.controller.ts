@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Put } from '@nestjs/common'
+import { Body, Controller, Get, Param, Put } from '@nestjs/common'
 import { BotStateRepository } from '../prisma/repositories/bot-state.repository'
 
 /**
@@ -18,5 +18,11 @@ export class BotController {
   async setPaused(@Body() body: { paused: boolean }): Promise<{ paused: boolean }> {
     await this.botState.set('paused', body.paused === true)
     return { paused: body.paused === true }
+  }
+
+  /** Generic read of a BotState key (e.g. `fearAndGreed`). Returns `{ value }`. */
+  @Get('state/:key')
+  async getState(@Param('key') key: string): Promise<{ value: unknown }> {
+    return { value: await this.botState.get(key) }
   }
 }
