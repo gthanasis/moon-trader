@@ -194,12 +194,15 @@ export interface Narration {
 - [ ] Narration generation never delays a trading cycle.
 - [ ] `pnpm build` and `pnpm test` pass.
 
-## Open Questions
+## Resolved Decisions
 
-1. **Finest granularity — `6h` or `day`?** `6h` gives a fresher "what just
-    happened" recap but is ~4 LLM calls/day before roll-ups. Spec currently
-    assumes `6h`.
-2. **Backfill depth** — when the feature ships, do we generate narrations for
-    *historical* trades already in the DB, or only from launch forward?
-3. **Live activity feed history** — does it show only events since the page
-    opened, or load the last N decisions on mount then stream?
+1. **Finest granularity = `6h`.** The narration hierarchy is 6h → day → week →
+   month. ~6 LLM calls/day total (4 × 6h + day + week/month roll-ups).
+2. **Backfill history.** On first deploy a one-off backfill generates
+   narrations for all trades already in the DB so the zoom timeline is
+   populated from launch. Backfill runs bottom-up (6h blocks first, then
+   roll-ups) and is idempotent (the `@@unique([granularity, periodStart])`
+   constraint).
+3. **Live feed = last N + stream.** The `LiveActivityFeed` loads the last ~20
+   decisions/trades on mount (via `GET /decisions`) then prepends live SSE
+   events, so it is never empty.
