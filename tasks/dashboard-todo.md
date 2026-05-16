@@ -5,7 +5,7 @@ Plan: `tasks/dashboard-plan.md` · Spec: `docs/superpowers/specs/2026-05-16-home
 ## Phase 1 — Narration backend
 - [x] Task 1: Narration model + repository
 - [x] Task 2: NarrationService — 6h generation
-- [ ] Task 3: Roll-up generation (day/week/month)
+- [x] Task 3: Roll-up generation (day/week/month)
 - [ ] Task 4: Cron wiring
 - [ ] Task 5: GET /narrations
 - [ ] Task 6: Backfill script

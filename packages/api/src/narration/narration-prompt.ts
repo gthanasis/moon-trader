@@ -1,4 +1,4 @@
-import type { Trade, NarrationStats, NarrationGranularity } from '../common'
+import type { Trade, Narration, NarrationStats, NarrationGranularity } from '../common'
 import type { StoredDecision } from '../prisma/repositories/decision.repository'
 
 export interface NarrationPrompt {
@@ -55,6 +55,40 @@ Decisions the bot made this period:
 ${decisionLines}
 
 Write the JSON narration for this period.`
+
+  return { system: SYSTEM, user }
+}
+
+/**
+ * Builds the LLM prompt for a roll-up narration (day/week/month), summarising
+ * the child-period narrations rather than raw trades.
+ */
+export function buildRollupPrompt(input: {
+  granularity: NarrationGranularity
+  periodStart: Date
+  periodEnd: Date
+  children: Narration[]
+  stats: NarrationStats
+}): NarrationPrompt {
+  const { granularity, periodStart, periodEnd, children, stats } = input
+
+  const childLines = children
+    .map(c => `- ${c.periodStart.toISOString()} (${c.granularity}): ${c.summary}`)
+    .join('\n')
+
+  const user = `You are writing a ${granularity} recap by summarising its sub-period narrations.
+
+Period: ${periodStart.toISOString()} → ${periodEnd.toISOString()}
+
+Totals for the whole period:
+- Net P&L: ${fmtUsd(stats.pnl)}
+- Trades closed: ${stats.trades} (${stats.wins} wins, ${stats.losses} losses)
+- Win rate: ${(stats.winRate * 100).toFixed(0)}%
+
+Sub-period narrations:
+${childLines || '(none)'}
+
+Write the JSON narration summarising this whole ${granularity}.`
 
   return { system: SYSTEM, user }
 }
