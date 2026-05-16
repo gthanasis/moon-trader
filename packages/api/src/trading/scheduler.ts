@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common'
 import cron from 'node-cron'
 import type { ScheduledTask } from 'node-cron'
 
@@ -13,6 +14,8 @@ export class Scheduler {
   constructor(
     private readonly cycle: CycleLike,
     cronExpression: string,
+    // Shared with TradingService so the whole trading module logs under one context.
+    private readonly logger: Logger = new Logger('TradingService'),
   ) {
     this.cronExpression = cronExpression
   }
@@ -49,7 +52,7 @@ export class Scheduler {
     try {
       await this.cycle.run()
     } catch (err) {
-      console.error('[Scheduler] Cycle error:', err)
+      this.logger.error(`Cycle error: ${String(err)}`)
     } finally {
       this.isRunning = false
     }

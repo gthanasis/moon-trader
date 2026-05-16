@@ -2,24 +2,26 @@ import { cn } from '@/lib/utils'
 import { Slot } from '@radix-ui/react-slot'
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'default' | 'outline' | 'secondary' | 'ghost'
+  variant?: 'default' | 'outline' | 'secondary' | 'ghost' | 'destructive'
   asChild?: boolean
+}
+
+const VARIANTS: Record<NonNullable<ButtonProps['variant']>, string> = {
+  default: 'bg-accent text-bg hover:brightness-110',
+  outline: 'border border-border bg-transparent text-fg hover:bg-sf2',
+  secondary: 'bg-sf2 text-fg hover:brightness-125',
+  ghost: 'text-muted hover:bg-sf2 hover:text-fg',
+  destructive: 'bg-neg text-white hover:brightness-110',
 }
 
 export function Button({ className, variant = 'default', asChild = false, ...props }: ButtonProps) {
   const Comp = asChild ? Slot : 'button'
-  const variants = {
-    default: 'bg-primary text-primary-foreground hover:bg-primary/90',
-    outline: 'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
-    secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
-    ghost: 'hover:bg-accent hover:text-accent-foreground',
-  }
   return (
     <Comp
       className={cn(
-        'inline-flex items-center justify-center rounded-md text-sm font-medium h-10 px-4 py-2 disabled:opacity-50',
-        variants[variant],
-        className
+        'inline-flex h-10 items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition-[filter,background-color,color] disabled:pointer-events-none disabled:opacity-40',
+        VARIANTS[variant],
+        className,
       )}
       {...props}
     />

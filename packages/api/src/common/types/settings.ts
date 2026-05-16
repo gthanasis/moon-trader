@@ -3,8 +3,8 @@
  * `settings` key and re-read by the live runner at the start of every cycle,
  * so changes take effect without restarting the process.
  *
- * Restart-only config (API keys, coins, timeframe, paper mode) stays in .env
- * and is intentionally NOT part of this type.
+ * Restart-only config (API keys, coins, timeframe) stays in .env and is
+ * intentionally NOT part of this type.
  */
 export interface BotSettings {
   /** How often the evaluation cycle runs, in minutes. Default: 60. */
@@ -19,7 +19,16 @@ export interface BotSettings {
   dailyLossLimitPct: number
   /** Trade size (USD) at or below which the bot trades without manual approval. Default: 50. */
   autoTradeLimit: number
+  /**
+   * When true the bot simulates fills instead of placing real orders.
+   * Default: true (paper). The trading loop re-reads this every cycle and
+   * flips the order manager in place, so no restart is needed.
+   */
+  paperMode: boolean
 }
+
+/** Numeric settings keys — everything in BotSettings except the booleans. */
+export type NumericSettingKey = Exclude<keyof BotSettings, 'paperMode'>
 
 export const DEFAULT_BOT_SETTINGS: BotSettings = {
   runIntervalMinutes: 60,
@@ -28,10 +37,11 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
   maxPositions: 5,
   dailyLossLimitPct: 0.05,
   autoTradeLimit: 50,
+  paperMode: true,
 }
 
 /** Inclusive bounds enforced by both the web form and the server action. */
-export const BOT_SETTINGS_BOUNDS: Record<keyof BotSettings, { min: number; max: number }> = {
+export const BOT_SETTINGS_BOUNDS: Record<NumericSettingKey, { min: number; max: number }> = {
   runIntervalMinutes: { min: 1, max: 1440 },
   minConfidence: { min: 0, max: 1 },
   riskPerTradePct: { min: 0.001, max: 1 },
@@ -42,18 +52,21 @@ export const BOT_SETTINGS_BOUNDS: Record<keyof BotSettings, { min: number; max: 
 
 /**
  * Merges a partial/untrusted value (e.g. a JSON blob from the DB) onto the
- * defaults, dropping any field that is not a finite number within bounds.
+ * defaults. Numeric fields are dropped unless finite and within bounds;
+ * `paperMode` is dropped unless it is a boolean.
  */
 export function normalizeBotSettings(raw: unknown): BotSettings {
   const result: BotSettings = { ...DEFAULT_BOT_SETTINGS }
   if (raw && typeof raw === 'object') {
-    for (const key of Object.keys(DEFAULT_BOT_SETTINGS) as (keyof BotSettings)[]) {
-      const val = (raw as Record<string, unknown>)[key]
+    const obj = raw as Record<string, unknown>
+    for (const key of Object.keys(BOT_SETTINGS_BOUNDS) as NumericSettingKey[]) {
+      const val = obj[key]
       const { min, max } = BOT_SETTINGS_BOUNDS[key]
       if (typeof val === 'number' && Number.isFinite(val) && val >= min && val <= max) {
         result[key] = val
       }
     }
+    if (typeof obj['paperMode'] === 'boolean') result.paperMode = obj['paperMode']
   }
   return result
 }

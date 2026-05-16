@@ -19,6 +19,10 @@ interface OrderManagerConfig {
 }
 
 export class OrderManager {
+  // NOTE: paper mode is restart-only in this legacy engine — seeded from the
+  // PAPER env var at startup. The NestJS engine (packages/api/src/core) makes
+  // this runtime-switchable via setPaper(), driven by the web paper/real
+  // toggle. Not back-ported here; this package is being retired.
   private readonly paper: boolean
   private readonly exchange?: ExchangeAdapter
   private readonly slippageBps: number

@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common'
 import type { LLMDecision, Position, Order } from '../common'
 import type { ExchangeAdapter } from './exchange-adapter'
 import { CapitalGuard } from './capital-guard'
@@ -39,6 +40,7 @@ interface ExecuteResult {
 }
 
 export class TradingEngine {
+  private readonly logger = new Logger(TradingEngine.name)
   private readonly guard: CapitalGuard
   private readonly positions: PositionTracker
   private readonly orders: OrderManager
@@ -70,10 +72,20 @@ export class TradingEngine {
     this.dailyStartCapital = this.currentEquity()
   }
 
-  /** Applies runtime-editable settings without restarting the engine. */
-  applySettings(settings: { maxPositions: number; dailyLossLimitPct: number }): void {
+  /**
+   * Applies runtime-editable settings without restarting the engine. When
+   * `paperMode` is provided the order manager is flipped between simulated
+   * and real fills in place.
+   */
+  applySettings(settings: { maxPositions: number; dailyLossLimitPct: number; paperMode?: boolean }): void {
     this.maxPositions = settings.maxPositions
     this.dailyLossLimitPct = settings.dailyLossLimitPct
+    if (settings.paperMode !== undefined) this.orders.setPaper(settings.paperMode)
+  }
+
+  /** True when the engine is simulating fills rather than trading for real. */
+  isPaper(): boolean {
+    return this.orders.isPaper()
   }
 
   private currentEquity(): number {
@@ -145,7 +157,7 @@ export class TradingEngine {
         return { executed: false, reason: 'no fill price available' }
       }
       if (order.fillPrice <= 0) {
-        console.error(`[TradingEngine] Invalid fill price for ${decision.coin}: ${order.fillPrice}`)
+        this.logger.error(`Invalid fill price for ${decision.coin}: ${order.fillPrice}`)
         return { executed: false, reason: `Invalid fill price for ${decision.coin}` }
       }
       this.guard.reserve(decision.size)

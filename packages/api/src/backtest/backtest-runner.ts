@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto'
+import { Logger } from '@nestjs/common'
 import type { Signal, TradingContext, Candle, Position, Order, Trade } from '../common'
 import type { LLMDecision } from '../common'
 import { EvaluationCycle } from '../llm'
@@ -272,6 +273,7 @@ class SimulatedEngine implements EngineLike {
 
 export class BacktestRunner {
   #cancelled = false
+  private readonly logger = new Logger(BacktestRunner.name)
 
   constructor(private readonly config: BacktestConfig) {}
 
@@ -295,7 +297,7 @@ export class BacktestRunner {
       }),
     )
     for (const r of sourceResults) {
-      if (r.status === 'rejected') console.warn('[BacktestRunner] Signal source failed:', r.reason)
+      if (r.status === 'rejected') this.logger.warn(`Signal source failed: ${String(r.reason)}`)
     }
     allSignals.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
 
@@ -346,7 +348,7 @@ export class BacktestRunner {
       try {
         await this.config.onStep?.(step, total, currentTime, cycleResult)
       } catch (err) {
-        console.warn('[BacktestRunner] onStep callback threw:', err)
+        this.logger.warn(`onStep callback threw: ${String(err)}`)
       }
 
       current += intervalMs

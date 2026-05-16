@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto'
+import { Logger } from '@nestjs/common'
 import type { EvaluationCycle, CycleResult } from '../llm'
 import type { TradingEngine } from '../core'
 import type { DecisionRepository } from '../prisma/repositories/decision.repository'
@@ -10,17 +11,20 @@ import type { TradeRepository } from '../prisma/repositories/trade.repository'
  * Pause gating: when `isPaused()` returns true the cycle is skipped entirely.
  * Sells and stop/TP exits are persisted via engine.onPositionClosed; this
  * function only persists the open trade row when a buy fills.
+ *
+ * `logger` is supplied by TradingService so the cycle logs under the same
+ * context as the rest of the trading module.
  */
 export async function runCycleWithPersistence(
   cycle: EvaluationCycle,
   engine: TradingEngine,
   decisionRepo: DecisionRepository,
   tradeRepo: TradeRepository,
-  paper: boolean,
   isPaused: () => Promise<boolean> = async () => false,
+  logger: Logger = new Logger('TradingService'),
 ): Promise<CycleResult | null> {
   if (await isPaused()) {
-    console.log(`[Cycle] ${new Date().toISOString()} — skipped: bot paused`)
+    logger.log('Cycle skipped: bot paused')
     return null
   }
 
@@ -28,10 +32,13 @@ export async function runCycleWithPersistence(
   const status = result.executed ? 'executed' : 'blocked'
   // 'hold' is not a rejection — don't surface it as a blocked reason.
   const blockedReason = !result.executed && result.decision.action !== 'hold' ? (result.reason ?? null) : null
-  console.log(`[Cycle] ${new Date().toISOString()} — ${result.decision.action.toUpperCase()} ${result.decision.coin} confidence=${result.decision.confidence.toFixed(2)} ${status} ${result.reason ?? ''}`.trimEnd())
+  logger.log(
+    `Cycle ${result.decision.action.toUpperCase()} ${result.decision.coin} ` +
+      `confidence=${result.decision.confidence.toFixed(2)} ${status} ${result.reason ?? ''}`.trimEnd(),
+  )
 
   const decisionId = await decisionRepo.saveDecision(result.decision, status, blockedReason).catch(err => {
-    console.error('[LiveTrader] Failed to persist decision:', err)
+    logger.error(`Failed to persist decision: ${String(err)}`)
     return null
   })
 
@@ -47,11 +54,12 @@ export async function runCycleWithPersistence(
       openedAt: new Date(),
       reasoning: result.decision.reasoning,
     }
-    await tradeRepo.saveTrade(trade, paper ? 'paper' : 'live').catch(err => {
-      console.error('[LiveTrader] Failed to persist trade:', err)
+    // Tag the row with the engine's current mode — paper/real is runtime-switchable.
+    await tradeRepo.saveTrade(trade, engine.isPaper() ? 'paper' : 'live').catch(err => {
+      logger.error(`Failed to persist trade: ${String(err)}`)
     })
     await decisionRepo.linkDecisionToTrade(decisionId, trade.id).catch(err => {
-      console.error('[LiveTrader] Failed to link decision to trade:', err)
+      logger.error(`Failed to link decision to trade: ${String(err)}`)
     })
   }
 

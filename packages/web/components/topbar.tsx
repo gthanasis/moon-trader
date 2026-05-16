@@ -2,7 +2,6 @@
 
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { getBotPaused, setBotPaused } from '@/app/actions'
 
 const PAGE_TITLES: Record<string, string> = {
   '/':          'Overview',
@@ -25,32 +24,11 @@ export function Topbar() {
   const title = PAGE_TITLES[pathname] ?? 'Trader'
   const [time, setTime] = useState('')
   const [mode, setModeState] = useState<'expert' | 'noob'>('expert')
-  // `paused` is null until the initial flag fetch resolves.
-  const [paused, setPaused] = useState<boolean | null>(null)
-  const [pauseBusy, setPauseBusy] = useState(false)
 
   useEffect(() => {
     const saved = localStorage.getItem('traderMode')
     if (saved === 'noob') setModeState('noob')
   }, [])
-
-  useEffect(() => {
-    getBotPaused().then(setPaused).catch(() => setPaused(null))
-  }, [])
-
-  async function togglePaused() {
-    if (paused === null || pauseBusy) return
-    const next = !paused
-    setPauseBusy(true)
-    setPaused(next) // optimistic
-    try {
-      await setBotPaused(next)
-    } catch {
-      setPaused(!next) // revert on failure
-    } finally {
-      setPauseBusy(false)
-    }
-  }
 
   useEffect(() => {
     const tick = () => setTime(new Date().toLocaleTimeString('en-US', { hour12: false }))
@@ -83,40 +61,6 @@ export function Topbar() {
             {time}
           </span>
         </div>
-
-        {/* bot pause toggle */}
-        <button
-          onClick={togglePaused}
-          disabled={paused === null || pauseBusy}
-          title={paused ? 'Bot paused — click to resume trading' : 'Bot running — click to pause trading'}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            padding: '3px 10px',
-            border: '1px solid var(--border)',
-            borderRadius: 'var(--r)',
-            background: 'transparent',
-            fontSize: '10.5px', fontFamily: 'monospace',
-            textTransform: 'uppercase', letterSpacing: '0.05em',
-            color: paused ? 'var(--neg)' : 'var(--pos)',
-            cursor: paused === null || pauseBusy ? 'default' : 'pointer',
-            opacity: paused === null ? 0.5 : 1,
-            transition: 'color 0.15s, opacity 0.15s',
-          }}
-        >
-          <span style={{
-            width: '6px', height: '6px', borderRadius: '50%',
-            background: paused === null ? 'var(--muted)' : paused ? 'var(--neg)' : 'var(--pos)',
-            display: 'inline-block',
-          }} />
-          {paused === null ? (
-            '…'
-          ) : (
-            <>
-              <span className="xp">{paused ? 'Paused' : 'Running'}</span>
-              <span className="nb">{paused ? 'Bot Off' : 'Bot On'}</span>
-            </>
-          )}
-        </button>
 
         {/* mode toggle */}
         <div style={{

@@ -6,7 +6,7 @@ describe('runCycleWithPersistence — pause gating', () => {
     const cycle = { run: vi.fn() }
 
     const result = await runCycleWithPersistence(
-      cycle as never, {} as never, {} as never, {} as never, true,
+      cycle as never, {} as never, {} as never, {} as never,
       async () => true,
     )
 
@@ -20,7 +20,7 @@ describe('runCycleWithPersistence — pause gating', () => {
     const decisionRepo = { saveDecision: vi.fn(async () => 'd1'), linkDecisionToTrade: vi.fn() }
 
     const result = await runCycleWithPersistence(
-      cycle as never, {} as never, decisionRepo as never, {} as never, true,
+      cycle as never, {} as never, decisionRepo as never, {} as never,
       async () => false,
     )
 

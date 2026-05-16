@@ -19,7 +19,9 @@ interface OrderManagerConfig {
 }
 
 export class OrderManager {
-  private readonly paper: boolean
+  // Mutable: flipped at runtime via setPaper() when the web paper/real toggle
+  // is saved. Real fills require `exchange` to be set.
+  private paper: boolean
   private readonly exchange?: ExchangeAdapter
   private readonly slippageBps: number
   private orders = new Map<string, Order>()
@@ -28,6 +30,20 @@ export class OrderManager {
     this.paper = config.paper
     this.exchange = config.exchange
     this.slippageBps = config.slippageBps ?? 0
+  }
+
+  /** True when fills are simulated rather than placed on the exchange. */
+  isPaper(): boolean {
+    return this.paper
+  }
+
+  /**
+   * Switches between paper (simulated fills) and real (exchange) trading at
+   * runtime. Already-open positions are not reconciled — the switch only
+   * affects orders placed after this call.
+   */
+  setPaper(paper: boolean): void {
+    this.paper = paper
   }
 
   async place(input: PlaceOrderInput): Promise<Order> {

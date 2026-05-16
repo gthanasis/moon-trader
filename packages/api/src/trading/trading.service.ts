@@ -113,7 +113,10 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
       },
     }
 
-    const exchangeAdapter = config.paper ? undefined : new CcxtExchangeAdapter(binanceExchange)
+    // Always build the exchange adapter so the engine can switch into real
+    // trading at runtime (web paper/real toggle). The adapter is inert until
+    // an order is actually placed in real mode.
+    const exchangeAdapter = new CcxtExchangeAdapter(binanceExchange)
 
     const engine = new TradingEngine({
       totalCapital: config.totalCapital,
@@ -176,12 +179,13 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
         run: async () => {
           await applyRuntimeSettings()
           return runCycleWithPersistence(
-            cycle, engine, this.decisionRepo, this.tradeRepo, config.paper,
-            () => this.isBotPaused(),
+            cycle, engine, this.decisionRepo, this.tradeRepo,
+            () => this.isBotPaused(), this.logger,
           )
         },
       },
       config.cronExpression,
+      this.logger,
     )
     this.scheduler = scheduler
     scheduler.start()
@@ -189,8 +193,10 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
     // reflect the web UI without waiting for an env-default-cadence tick.
     void applyRuntimeSettings()
 
+    // paper here is the env seed; applyRuntimeSettings() below overrides it
+    // with the persisted paperMode (defaults to paper/true) before cycle one.
     this.logger.log(
-      `Trading loop started: paper=${config.paper}, coins=${config.coins.join(',')}, cron="${config.cronExpression}"` +
+      `Trading loop started: paper=${config.paper} (env seed), coins=${config.coins.join(',')}, cron="${config.cronExpression}"` +
         (notifier ? ' | Telegram active' : ' | Telegram disabled'),
     )
   }

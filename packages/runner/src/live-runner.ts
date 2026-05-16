@@ -128,6 +128,10 @@ export function startLiveTrader(config: LiveConfig): LiveTraderHandle {
     },
   }
 
+  // NOTE: paper mode is restart-only here — fixed for the lifetime of the
+  // process. The NestJS API re-reads `paperMode` from BotSettings every cycle
+  // and flips the engine in place (web paper/real toggle). Not back-ported to
+  // this legacy runner, which is being retired in favour of packages/api.
   const exchangeAdapter = config.paper ? undefined : new CcxtExchangeAdapter(binanceExchange)
 
   const engine = new TradingEngine({
