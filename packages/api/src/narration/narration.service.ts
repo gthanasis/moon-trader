@@ -44,6 +44,20 @@ export class NarrationService {
     ])
 
     const stats = computeStats(trades)
+
+    // Empty period — skip the LLM call entirely (keeps backfill cheap).
+    if (trades.length === 0 && decisions.length === 0) {
+      await this.narrations.upsert({
+        granularity,
+        periodStart,
+        periodEnd,
+        summary: 'No trading activity in this period.',
+        assessment: null,
+        stats,
+      })
+      return
+    }
+
     const text = await this.llm.narrate(
       buildBlockPrompt({ granularity, periodStart, periodEnd, trades, decisions, stats }),
     )
@@ -79,6 +93,20 @@ export class NarrationService {
     }
 
     const stats = aggregateStats(children.map(c => c.stats))
+
+    // No trades across the whole period — canned summary, no LLM call.
+    if (stats.trades === 0) {
+      await this.narrations.upsert({
+        granularity,
+        periodStart,
+        periodEnd,
+        summary: 'No trading activity in this period.',
+        assessment: null,
+        stats,
+      })
+      return
+    }
+
     const text = await this.llm.narrate(
       buildRollupPrompt({ granularity, periodStart, periodEnd, children, stats }),
     )

@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:generate": "prisma generate --schema=./prisma/schema.prisma",
-    "db:migrate": "prisma migrate dev --schema=./prisma/schema.prisma"
+    "db:migrate": "prisma migrate dev --schema=./prisma/schema.prisma",
+    "narration:backfill": "tsx src/narration/backfill.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
