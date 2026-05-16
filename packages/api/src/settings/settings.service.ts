@@ -1,0 +1,25 @@
+import { Injectable } from '@nestjs/common'
+import { type BotSettings, normalizeBotSettings } from '../common'
+import { BotStateRepository } from '../prisma/repositories/bot-state.repository'
+
+/**
+ * Single source of truth for runtime-editable bot settings. Both the HTTP
+ * layer and the trading loop read settings through this service. Values are
+ * normalised against their bounds on both read and write.
+ */
+@Injectable()
+export class SettingsService {
+  constructor(private readonly botState: BotStateRepository) {}
+
+  /** Current settings, with defaults filling any missing/invalid field. */
+  async get(): Promise<BotSettings> {
+    return this.botState.getSettings()
+  }
+
+  /** Persists settings after clamping to bounds; returns the values saved. */
+  async save(settings: BotSettings): Promise<BotSettings> {
+    const normalized = normalizeBotSettings(settings)
+    await this.botState.setSettings(normalized)
+    return normalized
+  }
+}
