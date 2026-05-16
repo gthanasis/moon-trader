@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { Trade } from '@trader/shared'
+import type { Trade } from '@api/common'
 import { formatUsd, formatDuration } from '@/lib/format'
 
 function ReasoningCell({ text }: { text: string }) {

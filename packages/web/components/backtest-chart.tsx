@@ -1,7 +1,7 @@
 'use client'
 
 import { useId } from 'react'
-import type { PnlPoint } from '@trader/backtest'
+import type { PnlPoint } from '@api/common'
 
 interface BacktestChartProps {
   pnlCurve: PnlPoint[]

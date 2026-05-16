@@ -1,4 +1,4 @@
-import type { Signal, SignalType } from '@trader/shared'
+import type { Signal, SignalType } from '@api/common'
 
 const DOT_COLOR: Record<SignalType, string> = {
   news:      'var(--neg)',

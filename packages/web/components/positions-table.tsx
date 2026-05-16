@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import type { Trade } from '@trader/shared'
+import type { Trade } from '@api/common'
 import { formatUsd } from '@/lib/format'
 
 interface PositionsTableProps {

@@ -1,11 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useState, useTransition } from 'react'
-import { type BotSettings, BOT_SETTINGS_BOUNDS, DEFAULT_BOT_SETTINGS } from '@trader/shared'
-import { getBotPaused, setBotPaused } from '@/app/actions'
+import { useMemo, useState } from 'react'
+import { type BotSettings, BOT_SETTINGS_BOUNDS, DEFAULT_BOT_SETTINGS } from '@api/common'
+import { usePaused, useSetPaused, useSaveSettings } from '@/lib/queries'
 import { Select } from '@/components/ui/select'
 import { NumberStepper } from '@/components/ui/number-stepper'
-import { saveBotSettings } from './actions'
 
 /**
  * Per-field display metadata. `scale` converts the stored value to what the
@@ -152,20 +151,19 @@ function Switch({
 export function SettingsForm({ initial }: { initial: BotSettings }) {
   const [saved, setSaved] = useState<BotSettings>(initial)
   const [values, setValues] = useState<BotSettings>(initial)
-  const [pending, startTransition] = useTransition()
   const [status, setStatus] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
+
+  const saveSettings = useSaveSettings()
+  const pending = saveSettings.isPending
 
   // Bot power lives in the separate `paused` BotState key and applies
   // immediately — it is not part of the save/discard form flow.
-  const [paused, setPaused] = useState<boolean | null>(null)
-  const [pauseBusy, setPauseBusy] = useState(false)
+  const pausedQuery = usePaused()
+  const paused = pausedQuery.data?.paused ?? null
+  const setPausedMutation = useSetPaused()
 
   // When set, the "enable real trading" confirmation modal is open.
   const [confirmReal, setConfirmReal] = useState(false)
-
-  useEffect(() => {
-    getBotPaused().then(setPaused).catch(() => setPaused(null))
-  }, [])
 
   const dirty = useMemo(
     () => FIELDS.some(f => values[f.key] !== saved[f.key]) || values.paperMode !== saved.paperMode,
@@ -190,31 +188,24 @@ export function SettingsForm({ initial }: { initial: BotSettings }) {
     }
   }
 
-  const togglePaused = async () => {
+  const pauseBusy = setPausedMutation.isPending
+
+  const togglePaused = () => {
     if (paused === null || pauseBusy) return
-    const next = !paused
-    setPauseBusy(true)
-    setPaused(next) // optimistic
-    try {
-      await setBotPaused(next)
-    } catch {
-      setPaused(!next) // revert on failure
-    } finally {
-      setPauseBusy(false)
-    }
+    setPausedMutation.mutate(!paused)
   }
 
   const save = () => {
     setStatus(null)
-    startTransition(async () => {
-      try {
-        const result = await saveBotSettings(values)
+    saveSettings.mutate(values, {
+      onSuccess: result => {
         setSaved(result)
         setValues(result)
         setStatus({ kind: 'ok', text: 'Saved. The bot applies this on its next cycle.' })
-      } catch {
+      },
+      onError: () => {
         setStatus({ kind: 'error', text: 'Save failed. Check the connection and retry.' })
-      }
+      },
     })
   }
 
