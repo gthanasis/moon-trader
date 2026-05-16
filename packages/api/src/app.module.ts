@@ -6,6 +6,7 @@ import { PrismaModule } from './prisma/prisma.module'
 import { SettingsModule } from './settings/settings.module'
 import { TelegramModule } from './telegram/telegram.module'
 import { TradingModule } from './trading/trading.module'
+import { NarrationModule } from './narration/narration.module'
 import { HttpModule } from './http/http.module'
 
 @Module({
@@ -19,6 +20,7 @@ import { HttpModule } from './http/http.module'
     SettingsModule,
     TelegramModule,
     TradingModule,
+    NarrationModule,
     HttpModule,
   ],
   controllers: [HealthController],
