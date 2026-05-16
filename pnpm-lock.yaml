@@ -88,115 +88,6 @@ importers:
         specifier: ^1.6.0
         version: 1.6.1(@types/node@20.19.39)(terser@5.47.1)
 
-  packages/backtest:
-    dependencies:
-      '@trader/core':
-        specifier: workspace:*
-        version: link:../core
-      '@trader/data':
-        specifier: workspace:*
-        version: link:../data
-      '@trader/llm':
-        specifier: workspace:*
-        version: link:../llm
-      '@trader/shared':
-        specifier: workspace:*
-        version: link:../shared
-
-  packages/bot:
-    dependencies:
-      '@trader/db':
-        specifier: workspace:*
-        version: link:../db
-      '@trader/shared':
-        specifier: workspace:*
-        version: link:../shared
-      grammy:
-        specifier: ^1.0.0
-        version: 1.42.0
-
-  packages/core:
-    dependencies:
-      '@trader/shared':
-        specifier: workspace:*
-        version: link:../shared
-
-  packages/data:
-    dependencies:
-      '@trader/shared':
-        specifier: workspace:*
-        version: link:../shared
-
-  packages/db:
-    dependencies:
-      '@prisma/client':
-        specifier: ^5.0.0
-        version: 5.22.0(prisma@5.22.0)
-      '@trader/shared':
-        specifier: workspace:*
-        version: link:../shared
-    devDependencies:
-      prisma:
-        specifier: ^5.0.0
-        version: 5.22.0
-
-  packages/llm:
-    dependencies:
-      '@anthropic-ai/sdk':
-        specifier: ^0.30.0
-        version: 0.30.1
-      '@trader/core':
-        specifier: workspace:*
-        version: link:../core
-      '@trader/data':
-        specifier: workspace:*
-        version: link:../data
-      '@trader/shared':
-        specifier: workspace:*
-        version: link:../shared
-      openai:
-        specifier: ^4.0.0
-        version: 4.104.0(ws@8.20.0)
-
-  packages/runner:
-    dependencies:
-      '@trader/bot':
-        specifier: workspace:*
-        version: link:../bot
-      '@trader/core':
-        specifier: workspace:*
-        version: link:../core
-      '@trader/data':
-        specifier: workspace:*
-        version: link:../data
-      '@trader/db':
-        specifier: workspace:*
-        version: link:../db
-      '@trader/llm':
-        specifier: workspace:*
-        version: link:../llm
-      '@trader/shared':
-        specifier: workspace:*
-        version: link:../shared
-      ccxt:
-        specifier: ^4.0.0
-        version: 4.5.52
-      dotenv:
-        specifier: ^16.0.0
-        version: 16.6.1
-      node-cron:
-        specifier: ^3.0.0
-        version: 3.0.3
-    devDependencies:
-      '@types/node-cron':
-        specifier: ^3.0.11
-        version: 3.0.11
-      tsx:
-        specifier: ^4.0.0
-        version: 4.21.0
-
-  packages/shared: {}
-
   packages/web:
     dependencies:
       '@radix-ui/react-slot':
@@ -205,21 +96,6 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.0.0
         version: 5.100.10(react@18.3.1)
-      '@trader/backtest':
-        specifier: workspace:*
-        version: link:../backtest
-      '@trader/data':
-        specifier: workspace:*
-        version: link:../data
-      '@trader/db':
-        specifier: workspace:*
-        version: link:../db
-      '@trader/llm':
-        specifier: workspace:*
-        version: link:../llm
-      '@trader/shared':
-        specifier: workspace:*
-        version: link:../shared
       next:
         specifier: ^14.2.0
         version: 14.2.35(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
