@@ -40,6 +40,15 @@ export class TradeRepository {
     return rows.map(toDomainTrade)
   }
 
+  /** Trades whose `closedAt` falls in [from, to) — used for period narration. */
+  async findClosedBetween(from: Date, to: Date): Promise<Trade[]> {
+    const rows = await this.prisma.trade.findMany({
+      where: { closedAt: { gte: from, lt: to } },
+      orderBy: { closedAt: 'asc' },
+    })
+    return rows.map(toDomainTrade)
+  }
+
   async findOpenTradeByCoin(coin: string): Promise<Trade | null> {
     const row = await this.prisma.trade.findFirst({
       where: { coin, closedAt: null },

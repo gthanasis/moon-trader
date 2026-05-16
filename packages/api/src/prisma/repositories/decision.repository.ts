@@ -89,6 +89,15 @@ export class DecisionRepository {
     return rows.map(toStoredDecision)
   }
 
+  /** Decisions whose `decidedAt` falls in [from, to) — used for period narration. */
+  async findBetween(from: Date, to: Date): Promise<StoredDecision[]> {
+    const rows = await this.prisma.llmDecision.findMany({
+      where: { decidedAt: { gte: from, lt: to } },
+      orderBy: { decidedAt: 'asc' },
+    })
+    return rows.map(toStoredDecision)
+  }
+
   async updateDecisionStatus(id: string, status: 'approved' | 'rejected'): Promise<void> {
     await this.prisma.llmDecision.update({
       where: { id },
