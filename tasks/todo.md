@@ -7,7 +7,7 @@ Plan: `tasks/plan.md` · Spec: `docs/superpowers/specs/2026-05-16-nestjs-backend
 - [x] Task 1: Scaffold `packages/api` NestJS package — M
 - [x] Task 2: PrismaModule — port `db` — L
 - [x] Task 3: `common/` + MarketDataModule — port `shared`/`data` — M
-- [ ] Task 4: CoreModule — port `core` — M
+- [x] Task 4: CoreModule — port `core` — M
 - [ ] **Checkpoint A: Foundation** — build/test green, human review
 - [ ] Task 5: LlmModule — port `llm` — M
 - [ ] Task 6: BacktestModule — port `backtest` — M

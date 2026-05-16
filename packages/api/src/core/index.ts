@@ -1,0 +1,7 @@
+export { CapitalGuard } from './capital-guard'
+export { PositionTracker } from './position-tracker'
+export { OrderManager } from './order-manager'
+export { TradingEngine } from './trading-engine'
+export type { PositionClosedEvent } from './trading-engine'
+export type { ExchangeAdapter, ExecutedOrder } from './exchange-adapter'
+export { CcxtExchangeAdapter } from './exchange-adapter'
