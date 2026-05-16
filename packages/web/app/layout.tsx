@@ -13,13 +13,15 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body style={{ display: 'flex', minHeight: '100vh' }}>
+      {/* Fixed viewport height so `main` has a definite size — the dashboard
+          fills it exactly; taller pages scroll within `main`. */}
+      <body style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
         <QueryProvider>
           <ModeProvider />
           <Nav />
-          <div style={{ marginLeft: 'var(--sidebar)', flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ marginLeft: 'var(--sidebar)', flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
             <Topbar />
-            <main style={{ padding: '18px 20px', flex: 1 }}>{children}</main>
+            <main style={{ padding: '18px 20px', flex: 1, minHeight: 0, overflowY: 'auto' }}>{children}</main>
           </div>
         </QueryProvider>
       </body>
