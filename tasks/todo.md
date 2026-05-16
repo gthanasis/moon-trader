@@ -1,0 +1,27 @@
+# TODO: NestJS Backend Consolidation
+
+Plan: `tasks/plan.md` · Spec: `docs/superpowers/specs/2026-05-16-nestjs-backend-design.md`
+
+## Phase 1 — Build the `api` package
+
+- [ ] Task 1: Scaffold `packages/api` NestJS package — M
+- [ ] Task 2: PrismaModule — port `db` — L
+- [ ] Task 3: `common/` + MarketDataModule — port `shared`/`data` — M
+- [ ] Task 4: CoreModule — port `core` — M
+- [ ] **Checkpoint A: Foundation** — build/test green, human review
+- [ ] Task 5: LlmModule — port `llm` — M
+- [ ] Task 6: BacktestModule — port `backtest` — M
+- [ ] Task 7: SettingsModule — port settings feature — S
+- [ ] Task 8: TelegramModule — port `bot` — M
+- [ ] Task 9: TradingModule — port `runner` (scheduler + live loop) — L
+- [ ] Task 10: HTTP controllers (positions/decisions/backtest+SSE/settings) — L
+- [ ] **Checkpoint B: `api` complete — "works as before"** — human review
+
+## Phase 2 — Migrate `web`, remove old packages
+
+- [ ] Task 11: Typed API client in `web` — S
+- [ ] Task 12: Migrate read screens (home/positions/trades/decisions) — M
+- [ ] Task 13: Migrate backtest screens + SSE consumer — M
+- [ ] Task 14: Migrate settings screen — S
+- [ ] Task 15: Delete old packages + workspace cleanup — M
+- [ ] **Checkpoint C: Complete** — full build/test green, ready to merge
