@@ -5,6 +5,7 @@ import { HealthController } from './health/health.controller'
 import { PrismaModule } from './prisma/prisma.module'
 import { SettingsModule } from './settings/settings.module'
 import { TelegramModule } from './telegram/telegram.module'
+import { TradingModule } from './trading/trading.module'
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { TelegramModule } from './telegram/telegram.module'
     PrismaModule,
     SettingsModule,
     TelegramModule,
+    TradingModule,
   ],
   controllers: [HealthController],
 })
