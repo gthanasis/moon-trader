@@ -5,6 +5,7 @@ import { PositionsController } from './positions.controller'
 import { DecisionsController } from './decisions.controller'
 import { BacktestController } from './backtest.controller'
 import { SettingsController } from './settings.controller'
+import { BotController } from './bot.controller'
 
 /**
  * HTTP layer. Repositories come from the global PrismaModule; BacktestService
@@ -17,6 +18,7 @@ import { SettingsController } from './settings.controller'
     DecisionsController,
     BacktestController,
     SettingsController,
+    BotController,
   ],
 })
 export class HttpModule {}
