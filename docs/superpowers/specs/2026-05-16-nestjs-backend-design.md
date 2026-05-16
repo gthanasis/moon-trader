@@ -47,7 +47,8 @@ wiring.
 | `CoreModule`       | `core`     | Trading engine, order manager, position tracker             |
 | `LlmModule`        | `llm`      | Claude / OpenAI evaluation cycle, prompt builder            |
 | `BacktestModule`   | `backtest` | Backtest runner, fill simulator, stats calculator           |
-| `TradingModule`    | `runner`   | Live trading loop on `@nestjs/schedule` `@Cron`             |
+| `SettingsModule`   | new        | Runtime-editable `BotSettings` — read/write, normalisation  |
+| `TradingModule`    | `runner`   | Live trading loop on `@nestjs/schedule`; dynamic reschedule |
 | `TelegramModule`   | `bot`      | grammy long-polling provider; approval flow now in-process  |
 | `common/`          | `shared`   | Plain shared types/utils — no NestJS module needed          |
 
@@ -70,11 +71,12 @@ Replaces the web app's 5 API routes and 2 `actions.ts` server actions:
 
 ### `web` changes
 
-`web` loses direct Prisma and engine access. Each of the ~6 screens (home,
-positions, trades, backtest, backtest/runs, backtest/runs/[id]) swaps its
-server-side DB query for a `fetch()` to the API. A small typed API-client module
-is the single seam. The backtest page's SSE consumer points at the NestJS
-`@Sse` endpoint.
+`web` loses direct Prisma and engine access. Each of the ~7 screens (home,
+positions, trades, backtest, backtest/runs, backtest/runs/[id], settings) swaps
+its server-side DB query or server action for a `fetch()` to the API. A small
+typed API-client module is the single seam. The backtest page's SSE consumer
+points at the NestJS `@Sse` endpoint; the settings page's `getBotSettings` /
+`saveBotSettings` server actions become `GET` / `PUT /settings` calls.
 
 ## Detailed `api` structure
 
@@ -94,6 +96,7 @@ packages/api/
         decision.repository.ts
         signal.repository.ts
         backtest-run.repository.ts
+        bot-state.repository.ts  # key/value store; holds `settings`
     market-data/
       market-data.module.ts
       sources/binance.source.ts
@@ -115,10 +118,15 @@ packages/api/
       fill-simulator.ts
       historical-slice.ts
       stats-calculator.ts
+    settings/
+      settings.module.ts
+      settings.service.ts    # get/set BotSettings via bot-state repo
+      bot-settings.ts        # ex-shared: type, defaults, bounds,
+                             #   normalizeBotSettings, intervalToCron
     trading/                 # ex-`runner`
       trading.module.ts
       trading.service.ts     # live loop logic (ex live-runner.ts)
-      trading.scheduler.ts   # @Cron entrypoint -> trading.service
+      trading.scheduler.ts   # dynamic cron via SchedulerRegistry
       data-loader.service.ts
     telegram/                # ex-`bot`
       telegram.module.ts
@@ -130,6 +138,7 @@ packages/api/
       positions.controller.ts
       decisions.controller.ts
       backtest.controller.ts
+      settings.controller.ts
   tests/                     # vitest, mirrors src/
   nest-cli.json
   package.json
@@ -144,10 +153,11 @@ MarketDataModule    <- PrismaModule
 CoreModule          <- MarketDataModule
 LlmModule           <- CoreModule, MarketDataModule
 BacktestModule      <- CoreModule, MarketDataModule, LlmModule, PrismaModule
+SettingsModule      <- PrismaModule
 TelegramModule      <- PrismaModule
 TradingModule       <- CoreModule, MarketDataModule, LlmModule, PrismaModule,
-                       TelegramModule          (@nestjs/schedule)
-HttpModule (controllers) <- BacktestModule, PrismaModule
+                       SettingsModule, TelegramModule    (@nestjs/schedule)
+HttpModule (controllers) <- BacktestModule, SettingsModule, PrismaModule
 ```
 
 `common/` holds plain types/functions imported anywhere; it is not a NestJS
@@ -169,6 +179,8 @@ source, not their rendering.
 | GET    | `/backtest/runs/:id`    | `app/api/backtest/runs/[id]/route.ts` | Single run + stats |
 | POST   | `/backtest/runs`        | `app/backtest/actions.ts` (start)     | Created run id |
 | GET    | `/backtest/stream`      | `app/api/backtest/stream/route.ts`    | `text/event-stream` (`@Sse`) progress events |
+| GET    | `/settings`             | `app/settings/actions.ts` (`getBotSettings`) | Current `BotSettings` (defaults fill gaps) |
+| PUT    | `/settings`             | `app/settings/actions.ts` (`saveBotSettings`) | Normalised `BotSettings` actually saved |
 
 The `@Sse('/backtest/stream')` endpoint returns an RxJS `Observable` of
 `MessageEvent`s; `BacktestRunnerService` emits progress through a `Subject` the
@@ -177,6 +189,42 @@ the 185-line Next.js route.
 
 DTOs (request/response types) live next to their controller and reuse
 `common/` types where possible to avoid drift.
+
+## Settings integration
+
+A runtime-editable settings feature already exists in this branch's working
+tree (uncommitted) and must be carried through the migration rather than
+rebuilt. Its current shape:
+
+- `BotSettings` — a flat type of 6 numeric fields (`runIntervalMinutes`,
+  `minConfidence`, `riskPerTradePct`, `maxPositions`, `dailyLossLimitPct`,
+  `autoTradeLimit`), with `DEFAULT_BOT_SETTINGS`, `BOT_SETTINGS_BOUNDS`,
+  `normalizeBotSettings` (clamps untrusted input), and `intervalToCron`.
+- Persistence: a `BotState` key/value table; settings live under the
+  `settings` key, read/written via `BotStateRepository.getSettings/setSettings`.
+- The live runner re-reads settings at the **start of every cycle**, so changes
+  apply without a process restart. The engine and evaluation cycle expose
+  `applySettings()`; the scheduler exposes `reschedule()`.
+- Restart-only config (API keys, coins, timeframe, paper mode) deliberately
+  stays in `.env` and is **not** part of `BotSettings`.
+
+How it lands in the NestJS design:
+
+- `BotSettings` and its helpers move to `settings/bot-settings.ts` (a `common/`
+  candidate, kept in the settings folder for cohesion).
+- `BotStateRepository` becomes a provider in `PrismaModule`.
+- `SettingsModule` exposes a `SettingsService` (`get()` / `save()`, both running
+  values through `normalizeBotSettings`) — the single source of truth consumed
+  by both `TradingModule` and `SettingsController`.
+- `TradingService` injects `SettingsService` and re-reads settings each cycle,
+  applying them via the engine/evaluation `applySettings()` methods — preserving
+  the current no-restart behaviour.
+- The scheduler's runtime reschedule uses `@nestjs/schedule`'s
+  `SchedulerRegistry`: when `runIntervalMinutes` changes, the trading cron job
+  is removed and re-added with the new `intervalToCron` expression. This
+  replaces the `runner`'s `scheduler.reschedule()`.
+- `SettingsController` serves `GET/PUT /settings`, replacing the
+  `getBotSettings` / `saveBotSettings` server actions.
 
 ## Accepted risk
 
@@ -198,6 +246,8 @@ module, and the HTTP controllers.
 **Exit criteria — "works as before":**
 
 - The live trading loop runs under NestJS and behaves as the old `runner` did.
+- Editing settings via `PUT /settings` takes effect on the next cycle without a
+  restart, and changing `runIntervalMinutes` reschedules the trading cron.
 - The Telegram bot connects and the approval flow works end-to-end.
 - All migrated unit tests pass under `vitest`.
 - The HTTP endpoints return the same data the old Next.js routes/actions did,
@@ -219,6 +269,7 @@ config to the final 2-package layout.
 Roughly 3–4 focused sessions, mostly mechanical:
 
 - ~1 session: scaffold `api`, move engine modules, fix imports.
-- ~1 session: `TradingModule` (scheduler) and `TelegramModule`.
-- ~1 session: HTTP controllers and the SSE endpoint.
+- ~1 session: `TradingModule` (scheduler + dynamic reschedule), `SettingsModule`,
+  and `TelegramModule`.
+- ~1 session: HTTP controllers, the SSE endpoint, settings endpoints.
 - ~1 session: `web` migration and test import fixes.
