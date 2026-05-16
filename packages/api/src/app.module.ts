@@ -6,6 +6,7 @@ import { PrismaModule } from './prisma/prisma.module'
 import { SettingsModule } from './settings/settings.module'
 import { TelegramModule } from './telegram/telegram.module'
 import { TradingModule } from './trading/trading.module'
+import { HttpModule } from './http/http.module'
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { TradingModule } from './trading/trading.module'
     SettingsModule,
     TelegramModule,
     TradingModule,
+    HttpModule,
   ],
   controllers: [HealthController],
 })
