@@ -32,6 +32,16 @@ export const useBacktestRuns = () =>
 export const useCandleRange = () =>
   useQuery({ queryKey: ['candleRange'], queryFn: api.getCandleRange })
 
+export const useNarrations = (opts: {
+  granularity?: import('./api-client').NarrationGranularity
+  from?: string
+  to?: string
+} = {}) =>
+  useQuery({
+    queryKey: ['narrations', opts.granularity ?? 'auto', opts.from ?? '', opts.to ?? ''],
+    queryFn: () => api.getNarrations(opts),
+  })
+
 export const useBacktestRun = (id: string) =>
   useQuery({ queryKey: ['backtestRun', id], queryFn: () => api.getBacktestRun(id), enabled: !!id })
 

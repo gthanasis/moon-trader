@@ -14,9 +14,25 @@ import type {
   BacktestTrade,
   PnlPoint,
   BacktestResult,
+  NarrationGranularity,
+  NarrationStats,
+  AppEvent,
+  AppEventType,
 } from '@api/common'
 
 export type { Trade, Signal, BotSettings, BacktestResult }
+export type { NarrationGranularity, NarrationStats, AppEvent, AppEventType }
+
+/** A narration row — mirrors the API's Narration (dates as ISO strings). */
+export interface Narration {
+  id: string
+  granularity: NarrationGranularity
+  periodStart: string
+  periodEnd: string
+  summary: string
+  assessment: string | null
+  stats: NarrationStats
+}
 
 /** A persisted decision row — mirrors the API's StoredDecision. */
 export interface StoredDecision extends LLMDecision {
@@ -105,6 +121,19 @@ export const api = {
   getBotState: <T = unknown>(key: string) =>
     request<{ value: T }>(`/bot/state/${key}`).then(r => r.value),
 
+  /**
+   * Narrations within a window. `granularity` is optional — the API picks one
+   * from the span when omitted.
+   */
+  getNarrations: (opts: { granularity?: NarrationGranularity; from?: string; to?: string } = {}) => {
+    const qs = new URLSearchParams()
+    if (opts.granularity) qs.set('granularity', opts.granularity)
+    if (opts.from) qs.set('from', opts.from)
+    if (opts.to) qs.set('to', opts.to)
+    const suffix = qs.toString() ? `?${qs}` : ''
+    return request<Narration[]>(`/narrations${suffix}`)
+  },
+
   /** Approve or reject a pending decision. */
   updateDecision: (id: string, status: 'approved' | 'rejected') =>
     request<{ ok: true }>(`/decisions/${id}`, {
@@ -157,4 +186,9 @@ export const api = {
 export function backtestStreamUrl(params: Record<string, string>): string {
   const qs = new URLSearchParams(params).toString()
   return `${API_BASE_URL}/backtest/stream?${qs}`
+}
+
+/** The SSE URL for the real-time bot-activity stream (`AppEvent`s). */
+export function eventsUrl(): string {
+  return `${API_BASE_URL}/events`
 }
