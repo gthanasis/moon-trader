@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config'
 import { resolve } from 'path'
 import { HealthController } from './health/health.controller'
 import { PrismaModule } from './prisma/prisma.module'
+import { EventsModule } from './events/events.module'
 import { SettingsModule } from './settings/settings.module'
 import { TelegramModule } from './telegram/telegram.module'
 import { TradingModule } from './trading/trading.module'
@@ -17,6 +18,7 @@ import { HttpModule } from './http/http.module'
       envFilePath: resolve(__dirname, '../../../.env'),
     }),
     PrismaModule,
+    EventsModule,
     SettingsModule,
     TelegramModule,
     TradingModule,

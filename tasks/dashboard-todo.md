@@ -12,7 +12,7 @@ Plan: `tasks/dashboard-plan.md` · Spec: `docs/superpowers/specs/2026-05-16-home
 - [ ] **Checkpoint A** — narration backend green, human review
 
 ## Phase 2 — Real-time events
-- [ ] Task 7: EventsService + SSE /events
+- [x] Task 7: EventsService + SSE /events
 - [ ] Task 8: Emit events from the trading loop
 - [ ] **Checkpoint B** — /events pushes live
 
