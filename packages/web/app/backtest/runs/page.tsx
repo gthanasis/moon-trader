@@ -1,7 +1,9 @@
-import { backtestRunRepository } from '@trader/db'
-import Link from 'next/link'
+'use client'
 
-function formatDate(d: Date) {
+import Link from 'next/link'
+import { useBacktestRuns } from '@/lib/queries'
+
+function formatDate(d: string) {
   return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
@@ -17,8 +19,8 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-export default async function BacktestRunsPage() {
-  const runs = await backtestRunRepository.findAll(50)
+export default function BacktestRunsPage() {
+  const { data: runs = [], isLoading } = useBacktestRuns()
 
   return (
     <div>
@@ -36,10 +38,10 @@ export default async function BacktestRunsPage() {
             </tr>
           </thead>
           <tbody>
-            {runs.length === 0 && (
+            {(isLoading || runs.length === 0) && (
               <tr>
                 <td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>
-                  No backtest runs yet.
+                  {isLoading ? 'Loading…' : 'No backtest runs yet.'}
                 </td>
               </tr>
             )}

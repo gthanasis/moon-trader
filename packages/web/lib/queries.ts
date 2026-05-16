@@ -29,6 +29,9 @@ export const useBotState = <T = unknown>(key: string) =>
 export const useBacktestRuns = () =>
   useQuery({ queryKey: ['backtestRuns'], queryFn: api.getBacktestRuns })
 
+export const useCandleRange = () =>
+  useQuery({ queryKey: ['candleRange'], queryFn: api.getCandleRange })
+
 export const useBacktestRun = (id: string) =>
   useQuery({ queryKey: ['backtestRun', id], queryFn: () => api.getBacktestRun(id), enabled: !!id })
 

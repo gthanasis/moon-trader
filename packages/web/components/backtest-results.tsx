@@ -1,7 +1,7 @@
 import { BacktestChart } from '@/components/backtest-chart'
 import { StatCard } from '@/components/stat-card'
 import { formatUsd, formatPct, formatDuration } from '@/lib/format'
-import type { BacktestResult } from '@trader/backtest'
+import type { BacktestResult } from '@/lib/api-client'
 
 export function BacktestResults({ result }: { result: BacktestResult }) {
   const { stats, pnlCurve } = result

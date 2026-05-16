@@ -1,9 +1,11 @@
-import { backtestRunRepository } from '@trader/db'
-import { notFound } from 'next/navigation'
-import { BacktestResults } from '@/components/backtest-results'
-import type { BacktestResult } from '@trader/backtest'
+'use client'
 
-function formatDate(d: Date) {
+import { useParams } from 'next/navigation'
+import { BacktestResults } from '@/components/backtest-results'
+import { useBacktestRun } from '@/lib/queries'
+import type { BacktestResult } from '@/lib/api-client'
+
+function formatDate(d: string) {
   return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
@@ -13,9 +15,16 @@ const ACTION_COLOR: Record<string, string> = {
   hold: 'var(--muted)',
 }
 
-export default async function BacktestRunDetailPage({ params }: { params: { id: string } }) {
-  const run = await backtestRunRepository.findById(params.id)
-  if (!run) notFound()
+export default function BacktestRunDetailPage() {
+  const { id } = useParams<{ id: string }>()
+  const { data: run, isLoading, isError } = useBacktestRun(id)
+
+  if (isLoading) {
+    return <p style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--muted)' }}>Loading…</p>
+  }
+  if (isError || !run) {
+    return <p style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--neg)' }}>Run not found.</p>
+  }
 
   const intervalLabel = run.intervalMs >= 4 * 60 * 60 * 1000 ? '4h' : run.intervalMs >= 60 * 60 * 1000 ? '1h' : '15m'
 
@@ -65,7 +74,7 @@ export default async function BacktestRunDetailPage({ params }: { params: { id: 
                 <div key={i} style={{
                   padding: '6px 10px',
                   borderLeft: `3px solid ${color}`,
-                  borderBottom: i < run.decisions!.length - 1 ? '1px solid var(--border)' : 'none',
+                  borderBottom: i < run.decisions.length - 1 ? '1px solid var(--border)' : 'none',
                 }}>
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'baseline', fontFamily: 'monospace', fontSize: '11px' }}>
                     <span style={{ color: 'var(--muted)', flexShrink: 0 }}>{label}</span>

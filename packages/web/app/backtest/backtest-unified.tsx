@@ -3,8 +3,8 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { BacktestResults } from '@/components/backtest-results'
-import type { BacktestResult } from '@trader/backtest'
-import type { BacktestRunSummary, BacktestRunDetail } from '@trader/db'
+import { api, backtestStreamUrl } from '@/lib/api-client'
+import type { BacktestResult, BacktestRunSummary, BacktestRunDetail } from '@/lib/api-client'
 
 // --- SSE types ---
 interface StepDecision {
@@ -135,8 +135,7 @@ export function BacktestUnified({ initialRuns, defaultFrom, defaultTo }: Props) 
     if (panel === 'none' || panel === 'new') return
     setDetailLoading(true)
     setDetail(null)
-    fetch(`/api/backtest/runs/${panel}`)
-      .then(r => r.json() as Promise<BacktestRunDetail>)
+    api.getBacktestRun(panel)
       .then(setDetail)
       .catch(() => setDetail(null))
       .finally(() => setDetailLoading(false))
@@ -149,11 +148,12 @@ export function BacktestUnified({ initialRuns, defaultFrom, defaultTo }: Props) 
     setStep(0); setTotal(0); setDecisions([]); setResult(null)
     setError(null); setExpanded(null); setRunId(null)
 
-    const params = new URLSearchParams({
-      from, to, model, intervalMs: String(intervalMs), initialCapital: capital,
-      ...(coins.trim() ? { coins: coins.trim() } : {}),
-    })
-    const es = new EventSource(`/api/backtest/stream?${params}`)
+    const es = new EventSource(
+      backtestStreamUrl({
+        from, to, model, intervalMs: String(intervalMs), initialCapital: capital,
+        ...(coins.trim() ? { coins: coins.trim() } : {}),
+      }),
+    )
     esRef.current = es
 
     es.onmessage = (e) => {
