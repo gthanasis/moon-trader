@@ -43,6 +43,17 @@ export function periodEndOf(granularity: NarrationGranularity, start: Date): Dat
   }
 }
 
+/**
+ * Chooses the narration granularity that best fits a viewed time span — so a
+ * 3-month view shows months, a 1-week view shows 6h blocks.
+ */
+export function pickGranularity(spanMs: number): NarrationGranularity {
+  if (spanMs >= 60 * DAY_MS) return 'month'
+  if (spanMs >= 14 * DAY_MS) return 'week'
+  if (spanMs >= 2 * DAY_MS) return 'day'
+  return '6h'
+}
+
 /** Floors a date to the start of its period for the given granularity. */
 export function floorToPeriod(granularity: NarrationGranularity, d: Date): Date {
   switch (granularity) {

@@ -5,6 +5,8 @@ import {
   floorToWeek,
   floorToMonth,
   periodEndOf,
+  pickGranularity,
+  DAY_MS,
 } from '../../src/narration/narration-periods'
 import { aggregateStats } from '../../src/narration/narration-stats'
 
@@ -33,6 +35,15 @@ describe('narration period boundaries', () => {
     expect(periodEndOf('day', start).toISOString()).toBe('2026-05-02T00:00:00.000Z')
     expect(periodEndOf('week', start).toISOString()).toBe('2026-05-08T00:00:00.000Z')
     expect(periodEndOf('month', start).toISOString()).toBe('2026-06-01T00:00:00.000Z')
+  })
+})
+
+describe('pickGranularity', () => {
+  it('maps a viewed span to a sensible granularity', () => {
+    expect(pickGranularity(90 * DAY_MS)).toBe('month')
+    expect(pickGranularity(20 * DAY_MS)).toBe('week')
+    expect(pickGranularity(5 * DAY_MS)).toBe('day')
+    expect(pickGranularity(12 * 60 * 60 * 1000)).toBe('6h')
   })
 })
 
