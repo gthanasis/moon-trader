@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { ApprovalBanner } from './approval-banner'
-import type { StoredDecision } from '@trader/db'
+import type { StoredDecision } from '@/lib/api-client'
 
 export function ApprovalBannerWrapper({ decision }: { decision: StoredDecision }) {
   const [dismissed, setDismissed] = useState(false)

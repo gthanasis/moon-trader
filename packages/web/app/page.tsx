@@ -1,23 +1,27 @@
-import { tradeRepository, botStateRepository, signalRepository, decisionRepository } from '@trader/db'
+'use client'
+
 import { StatCard } from '@/components/stat-card'
 import { SignalFeed } from '@/components/signal-feed'
 import { DecisionLog } from '@/components/decision-log'
 import { PositionsTable } from '@/components/positions-table'
 import { ApprovalBannerWrapper } from '@/components/approval-banner-wrapper'
 import { formatUsd } from '@/lib/format'
+import {
+  usePositions,
+  useTrades,
+  useDecisions,
+  usePendingDecision,
+  useSignals,
+  useBotState,
+} from '@/lib/queries'
 
-export const revalidate = 30
-
-export default async function OverviewPage() {
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
-  const [recentTrades, openTrades, fearAndGreed, signals, pendingDecision, recentDecisions] = await Promise.all([
-    tradeRepository.findRecentTrades(100),
-    tradeRepository.findOpenTrades(),
-    botStateRepository.get('fearAndGreed') as Promise<number | null>,
-    signalRepository.findSignalsSince(since),
-    decisionRepository.findPendingDecision(),
-    decisionRepository.findRecentDecisions(10),
-  ])
+export default function OverviewPage() {
+  const { data: recentTrades = [] } = useTrades(100)
+  const { data: openTrades = [] } = usePositions()
+  const { data: fearAndGreed = null } = useBotState<number | null>('fearAndGreed')
+  const { data: signals = [] } = useSignals()
+  const { data: pendingDecision = null } = usePendingDecision()
+  const { data: recentDecisions = [] } = useDecisions(10)
 
   const totalPnl = recentTrades.reduce((sum, t) => sum + (t.pnl ?? 0), 0)
   const capitalDeployed = openTrades.reduce((sum, t) => sum + t.size, 0)

@@ -1,14 +1,15 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import type { StoredDecision } from '@trader/db'
+import type { StoredDecision } from '@/lib/api-client'
+import { useUpdateDecision } from '@/lib/queries'
 
 interface ApprovalBannerProps {
   decision: StoredDecision
   onDismiss: () => void
 }
 
-function useCountdown(expiresAt: Date | null): string {
+function useCountdown(expiresAt: string | null): string {
   const [remaining, setRemaining] = useState('')
   useEffect(() => {
     if (!expiresAt) return
@@ -28,26 +29,19 @@ function useCountdown(expiresAt: Date | null): string {
 
 export function ApprovalBanner({ decision, onDismiss }: ApprovalBannerProps) {
   const countdown = useCountdown(decision.expiresAt)
-  const [loading, setLoading] = useState(false)
-
+  const updateDecision = useUpdateDecision()
   const [error, setError] = useState<string | null>(null)
+  const loading = updateDecision.isPending
 
   const respond = useCallback(async (status: 'approved' | 'rejected') => {
-    setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/decisions/${decision.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status }),
-      })
-      if (!res.ok) throw new Error(`Server error ${res.status}`)
+      await updateDecision.mutateAsync({ id: decision.id, status })
       onDismiss()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Request failed')
-      setLoading(false)
     }
-  }, [decision.id, onDismiss])
+  }, [decision.id, onDismiss, updateDecision])
 
   const actionLabel = decision.action.toUpperCase()
   const sideColor = decision.action === 'buy' ? 'var(--pos)' : 'var(--neg)'

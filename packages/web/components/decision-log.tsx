@@ -1,4 +1,4 @@
-import type { StoredDecision } from '@trader/db'
+import type { StoredDecision } from '@/lib/api-client'
 
 interface DecisionLogProps {
   decisions: StoredDecision[]
