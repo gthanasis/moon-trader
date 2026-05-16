@@ -3,7 +3,7 @@ import ccxt from 'ccxt'
 import { ClaudeAdapter, OpenAIAdapter, EvaluationCycle } from '../llm'
 import { TradingEngine, CcxtExchangeAdapter } from '../core'
 import { Pipeline, BinanceSource, FearAndGreedSource, RssNewsSource } from '../market-data'
-import { intervalToCron } from '../common'
+import { intervalToCron, type BotSettings } from '../common'
 import { TradeRepository } from '../prisma/repositories/trade.repository'
 import { DecisionRepository } from '../prisma/repositories/decision.repository'
 import { SignalRepository } from '../prisma/repositories/signal.repository'
@@ -163,9 +163,20 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
     })
 
     // Re-read runtime-editable settings and apply them in place. Fails open.
+    // `prev` lets us log only the fields that actually changed between cycles.
+    let prev: BotSettings | undefined
     const applyRuntimeSettings = async (): Promise<void> => {
       try {
         const settings = await this.settings.get()
+        if (prev) {
+          const changed = (Object.keys(settings) as (keyof BotSettings)[])
+            .filter(k => settings[k] !== prev![k])
+            .map(k => `${k}: ${String(prev![k])} → ${String(settings[k])}`)
+          if (changed.length > 0) {
+            this.logger.log(`Runtime settings changed — ${changed.join(', ')}`)
+          }
+        }
+        prev = settings
         engine.applySettings(settings)
         cycle.applySettings(settings)
         this.scheduler?.reschedule(intervalToCron(settings.runIntervalMinutes))

@@ -1,4 +1,4 @@
-import { Injectable, type MessageEvent } from '@nestjs/common'
+import { Injectable, Logger, type MessageEvent } from '@nestjs/common'
 import { Observable } from 'rxjs'
 import { OpenAIAdapter, ClaudeAdapter, type CycleResult } from '../llm'
 import { NullDataSource } from '../market-data'
@@ -30,6 +30,14 @@ type ParseResult = { ok: true; params: BacktestParams } | { ok: false; error: st
  */
 @Injectable()
 export class BacktestService {
+  private readonly logger = new Logger(BacktestService.name)
+
+  /** One-line summary of a run's parameters, for log messages. */
+  private describe(p: BacktestParams): string {
+    const span = `${p.from.toISOString().slice(0, 10)}→${p.to.toISOString().slice(0, 10)}`
+    return `${span} coins=${p.coins.join(',')} model=${p.model} capital=${p.initialCapital}`
+  }
+
   constructor(
     private readonly candles: CandleRepository,
     private readonly runs: BacktestRunRepository,
@@ -111,6 +119,8 @@ export class BacktestService {
 
   /** Runs a backtest to completion without persistence — returns the result. */
   async run(params: BacktestParams): Promise<unknown> {
+    this.logger.log(`Backtest started (unpersisted) — ${this.describe(params)}`)
+    const startedAt = Date.now()
     const ohlcv = await this.loadOhlcv(params.coins, params.from, params.to)
     const runner = new BacktestRunner({
       from: params.from,
@@ -123,7 +133,9 @@ export class BacktestService {
       adapter: this.buildAdapter(params.model),
       intervalMs: params.intervalMs,
     })
-    return runner.run()
+    const result = await runner.run()
+    this.logger.log(`Backtest finished (unpersisted) in ${Date.now() - startedAt}ms`)
+    return result
   }
 
   /**
@@ -135,6 +147,7 @@ export class BacktestService {
       let runner: BacktestRunner | undefined
       let completed = false
       const decisions: StepDecision[] = []
+      const startedAt = Date.now()
 
       void (async () => {
         let runId: string | undefined
@@ -151,6 +164,7 @@ export class BacktestService {
             initialCapital: params.initialCapital,
           })
           subscriber.next({ data: { type: 'run_created', runId } })
+          this.logger.log(`Backtest run ${runId} started — ${this.describe(params)}`)
 
           runner = new BacktestRunner({
             from: params.from,
@@ -186,19 +200,23 @@ export class BacktestService {
           })
 
           const result = await runner.run()
+          const elapsed = `${Date.now() - startedAt}ms`
           if (runner.wasCancelled && runId) {
             await this.runs.cancel(runId, result, decisions)
+            this.logger.warn(`Backtest run ${runId} cancelled after ${decisions.length} steps (${elapsed})`)
             subscriber.complete()
             return
           }
           await this.runs.complete(runId, result, decisions)
           completed = true
+          this.logger.log(`Backtest run ${runId} completed — ${decisions.length} steps in ${elapsed}`)
           subscriber.next({ data: { type: 'result', result } })
           subscriber.complete()
         } catch (err) {
           if (completed) return
           const message = err instanceof Error ? err.message : 'Unknown error'
           if (runId) await this.runs.fail(runId, message)
+          this.logger.error(`Backtest run ${runId ?? '(uncreated)'} failed — ${message}`)
           subscriber.next({ data: { type: 'error', message } })
           subscriber.complete()
         }

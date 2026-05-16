@@ -43,7 +43,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.bot?.stop()
+    if (this.bot) {
+      await this.bot.stop()
+      this.logger.log('Telegram bot stopped')
+    }
   }
 
   /** Trade/cycle notification sender. Undefined when Telegram is disabled. */
