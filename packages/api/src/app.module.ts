@@ -3,6 +3,8 @@ import { ConfigModule } from '@nestjs/config'
 import { resolve } from 'path'
 import { HealthController } from './health/health.controller'
 import { PrismaModule } from './prisma/prisma.module'
+import { SettingsModule } from './settings/settings.module'
+import { TelegramModule } from './telegram/telegram.module'
 
 @Module({
   imports: [
@@ -12,6 +14,8 @@ import { PrismaModule } from './prisma/prisma.module'
       envFilePath: resolve(__dirname, '../../../.env'),
     }),
     PrismaModule,
+    SettingsModule,
+    TelegramModule,
   ],
   controllers: [HealthController],
 })

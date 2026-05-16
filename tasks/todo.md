@@ -12,7 +12,7 @@ Plan: `tasks/plan.md` · Spec: `docs/superpowers/specs/2026-05-16-nestjs-backend
 - [x] Task 5: LlmModule — port `llm` — M
 - [x] Task 6: BacktestModule — port `backtest` — M
 - [x] Task 7: SettingsModule — port settings feature — S
-- [ ] Task 8: TelegramModule — port `bot` — M
+- [x] Task 8: TelegramModule — port `bot` — M
 - [ ] Task 9: TradingModule — port `runner` (scheduler + live loop) — L
 - [ ] Task 10: HTTP controllers (positions/decisions/backtest+SSE/settings) — L
 - [ ] **Checkpoint B: `api` complete — "works as before"** — human review
