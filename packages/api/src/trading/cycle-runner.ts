@@ -4,6 +4,7 @@ import type { EvaluationCycle, CycleResult } from '../llm'
 import type { TradingEngine } from '../core'
 import type { DecisionRepository } from '../prisma/repositories/decision.repository'
 import type { TradeRepository } from '../prisma/repositories/trade.repository'
+import type { EventsService } from '../events/events.service'
 
 /**
  * Runs one evaluation cycle and persists its decision and any resulting trade.
@@ -22,6 +23,7 @@ export async function runCycleWithPersistence(
   tradeRepo: TradeRepository,
   isPaused: () => Promise<boolean> = async () => false,
   logger: Logger = new Logger('TradingService'),
+  events?: EventsService,
 ): Promise<CycleResult | null> {
   if (await isPaused()) {
     logger.log('Cycle skipped: bot paused')
@@ -36,6 +38,15 @@ export async function runCycleWithPersistence(
     `Cycle ${result.decision.action.toUpperCase()} ${result.decision.coin} ` +
       `confidence=${result.decision.confidence.toFixed(2)} ${status} ${result.reason ?? ''}`.trimEnd(),
   )
+
+  events?.emit('decision_made', {
+    action: result.decision.action,
+    coin: result.decision.coin,
+    confidence: result.decision.confidence,
+    reasoning: result.decision.reasoning,
+    executed: result.executed,
+    blockedReason,
+  })
 
   const decisionId = await decisionRepo.saveDecision(result.decision, status, blockedReason).catch(err => {
     logger.error(`Failed to persist decision: ${String(err)}`)
@@ -61,6 +72,7 @@ export async function runCycleWithPersistence(
     await decisionRepo.linkDecisionToTrade(decisionId, trade.id).catch(err => {
       logger.error(`Failed to link decision to trade: ${String(err)}`)
     })
+    events?.emit('trade_opened', { coin: trade.coin, size: trade.size, entryPrice: trade.entryPrice })
   }
 
   return result

@@ -11,6 +11,7 @@ import { CandleRepository } from '../prisma/repositories/candle.repository'
 import { BotStateRepository } from '../prisma/repositories/bot-state.repository'
 import { SettingsService } from '../settings/settings.service'
 import { TelegramService } from '../telegram/telegram.service'
+import { EventsService } from '../events/events.service'
 import { Scheduler } from './scheduler'
 import { loadConfig, type LiveConfig } from './config'
 import { runCycleWithPersistence } from './cycle-runner'
@@ -38,6 +39,7 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
     private readonly botState: BotStateRepository,
     private readonly settings: SettingsService,
     private readonly telegram: TelegramService,
+    private readonly events: EventsService,
   ) {}
 
   onModuleInit(): void {
@@ -101,6 +103,7 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
           await this.signalRepo.saveSignals(snapshot.signals).catch(err =>
             this.logger.error(`Failed to persist signals: ${String(err)}`),
           )
+          this.events.emit('signals_ingested', { count: snapshot.signals.length })
         }
         if (Object.keys(snapshot.ohlcv).length > 0) {
           await Promise.all(
@@ -133,6 +136,7 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
             await this.tradeRepo.closeTrade(openTrade.id, { exitPrice: fillPrice, closedAt: new Date(), pnl })
             this.logger.log(`Closed ${coin} trade ${openTrade.id} via ${reason}: fillPrice=${fillPrice} pnl=${pnl.toFixed(2)}`)
           }
+          this.events.emit('trade_closed', { coin, fillPrice, pnl, reason })
         } catch (err) {
           this.logger.error(`Failed to persist position close: ${String(err)}`)
         }
@@ -189,9 +193,10 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
       {
         run: async () => {
           await applyRuntimeSettings()
+          this.events.emit('cycle_started')
           return runCycleWithPersistence(
             cycle, engine, this.decisionRepo, this.tradeRepo,
-            () => this.isBotPaused(), this.logger,
+            () => this.isBotPaused(), this.logger, this.events,
           )
         },
       },

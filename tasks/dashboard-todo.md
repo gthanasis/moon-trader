@@ -13,7 +13,7 @@ Plan: `tasks/dashboard-plan.md` · Spec: `docs/superpowers/specs/2026-05-16-home
 
 ## Phase 2 — Real-time events
 - [x] Task 7: EventsService + SSE /events
-- [ ] Task 8: Emit events from the trading loop
+- [x] Task 8: Emit events from the trading loop
 - [ ] **Checkpoint B** — /events pushes live
 
 ## Phase 3 — Web dashboard
