@@ -61,9 +61,10 @@ export function TradesTable({ trades }: TradesTableProps) {
       <tbody>
         {trades.map(trade => {
           const pnl = trade.pnl ?? 0
+          // Date fields arrive as ISO strings over HTTP — wrap before use.
           const durationMs =
             trade.closedAt && trade.openedAt
-              ? trade.closedAt.getTime() - trade.openedAt.getTime()
+              ? new Date(trade.closedAt).getTime() - new Date(trade.openedAt).getTime()
               : null
 
           return (
