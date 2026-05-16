@@ -19,6 +19,9 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@api/*": [
+        "../api/src/*"
       ]
     },
     "outDir": ".next/types",

@@ -19,7 +19,7 @@ Plan: `tasks/plan.md` · Spec: `docs/superpowers/specs/2026-05-16-nestjs-backend
 
 ## Phase 2 — Migrate `web`, remove old packages
 
-- [ ] Task 11: Typed API client in `web` — S
+- [x] Task 11: Typed API client in `web` — S
 - [ ] Task 12: Migrate read screens (home/positions/trades/decisions) — M
 - [ ] Task 13: Migrate backtest screens + SSE consumer — M
 - [ ] Task 14: Migrate settings screen — S
