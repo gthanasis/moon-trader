@@ -7,6 +7,8 @@
  */
 import type {
   Trade,
+  Signal,
+  LLMDecision,
   BotSettings,
   BacktestStats,
   BacktestTrade,
@@ -14,7 +16,16 @@ import type {
   BacktestResult,
 } from '@api/common'
 
-export type { Trade, BotSettings, BacktestResult }
+export type { Trade, Signal, BotSettings, BacktestResult }
+
+/** A persisted decision row — mirrors the API's StoredDecision. */
+export interface StoredDecision extends LLMDecision {
+  id: string
+  status: 'executed' | 'blocked' | 'pending' | 'approved' | 'rejected'
+  blockedReason: string | null
+  expiresAt: string | null
+  decidedAt: string
+}
 
 /** Base URL of the API. Configurable for non-local deployments. */
 export const API_BASE_URL =
@@ -75,6 +86,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   /** Open positions. */
   getPositions: () => request<Trade[]>('/positions'),
+
+  /** Recent trades (most recent first). */
+  getTrades: (limit = 100) => request<Trade[]>(`/trades?limit=${limit}`),
+
+  /** Recent decisions (most recent first). */
+  getDecisions: (limit = 20) => request<StoredDecision[]>(`/decisions?limit=${limit}`),
+
+  /** The decision currently awaiting approval, or null. */
+  getPendingDecision: () =>
+    request<StoredDecision | null>('/decisions/pending'),
+
+  /** Signals from the last `sinceMs` milliseconds (default 24h). */
+  getSignals: (sinceMs = 24 * 60 * 60 * 1000) =>
+    request<Signal[]>(`/signals?sinceMs=${sinceMs}`),
+
+  /** Generic BotState value read (e.g. `fearAndGreed`). */
+  getBotState: <T = unknown>(key: string) =>
+    request<{ value: T }>(`/bot/state/${key}`).then(r => r.value),
 
   /** Approve or reject a pending decision. */
   updateDecision: (id: string, status: 'approved' | 'rejected') =>
