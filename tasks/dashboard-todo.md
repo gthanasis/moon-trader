@@ -3,7 +3,7 @@
 Plan: `tasks/dashboard-plan.md` · Spec: `docs/superpowers/specs/2026-05-16-home-dashboard-narration-design.md`
 
 ## Phase 1 — Narration backend
-- [ ] Task 1: Narration model + repository
+- [x] Task 1: Narration model + repository
 - [ ] Task 2: NarrationService — 6h generation
 - [ ] Task 3: Roll-up generation (day/week/month)
 - [ ] Task 4: Cron wiring

@@ -6,6 +6,7 @@ import { DecisionRepository } from './repositories/decision.repository'
 import { CandleRepository } from './repositories/candle.repository'
 import { BotStateRepository } from './repositories/bot-state.repository'
 import { BacktestRunRepository } from './repositories/backtest-run.repository'
+import { NarrationRepository } from './repositories/narration.repository'
 
 const providers = [
   PrismaService,
@@ -15,6 +16,7 @@ const providers = [
   CandleRepository,
   BotStateRepository,
   BacktestRunRepository,
+  NarrationRepository,
 ]
 
 /**

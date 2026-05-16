@@ -103,3 +103,21 @@ model BacktestRun {
   @@index([createdAt])
   @@index([status])
 }
+
+model Narration {
+  id          String   @id @default(cuid())
+  // '6h' | 'day' | 'week' | 'month'
+  granularity String
+  periodStart DateTime
+  periodEnd   DateTime
+  // LLM-written plain-language recap of the period.
+  summary     String
+  // Brief judgement of whether the bot behaved sensibly.
+  assessment  String?
+  // { pnl, trades, wins, losses, winRate }
+  stats       Json
+  createdAt   DateTime @default(now())
+
+  @@unique([granularity, periodStart])
+  @@index([granularity, periodStart])
+}
