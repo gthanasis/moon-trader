@@ -8,6 +8,7 @@ const links = [
   { href: '/positions', xp: 'Open Positions',  nb: 'Active Trades' },
   { href: '/trades',    xp: 'Trade History',   nb: 'Past Trades' },
   { href: '/backtest',  xp: 'Backtest',        nb: 'Test the AI' },
+  { href: '/settings',  xp: 'Settings',        nb: 'Bot Settings' },
 ]
 
 export function Nav() {
@@ -30,7 +31,7 @@ export function Nav() {
       {/* nav items */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '2px', padding: '0 8px' }}>
         {links.map(link => {
-          const active = pathname === link.href
+          const active = pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href))
           return (
             <Link
               key={link.href}
@@ -61,8 +62,8 @@ export function Nav() {
             background: 'var(--pos)', display: 'inline-block',
           }} />
           <span style={{ fontSize: '10px', fontFamily: 'monospace', color: 'var(--muted)' }}>
-            <span className="xp">Live · 15m cycle</span>
-            <span className="nb">Live · checks every 15 min</span>
+            <span className="xp">Live · scheduled</span>
+            <span className="nb">Live · running</span>
           </span>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { tradeRepository, botStateRepository, signalRepository, decisionRepository } from '@trader/db'
 import { StatCard } from '@/components/stat-card'
 import { SignalFeed } from '@/components/signal-feed'
+import { DecisionLog } from '@/components/decision-log'
 import { PositionsTable } from '@/components/positions-table'
 import { ApprovalBannerWrapper } from '@/components/approval-banner-wrapper'
 import { formatUsd } from '@/lib/format'
@@ -9,12 +10,13 @@ export const revalidate = 30
 
 export default async function OverviewPage() {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000)
-  const [recentTrades, openTrades, fearAndGreed, signals, pendingDecision] = await Promise.all([
+  const [recentTrades, openTrades, fearAndGreed, signals, pendingDecision, recentDecisions] = await Promise.all([
     tradeRepository.findRecentTrades(100),
     tradeRepository.findOpenTrades(),
     botStateRepository.get('fearAndGreed') as Promise<number | null>,
     signalRepository.findSignalsSince(since),
     decisionRepository.findPendingDecision(),
+    decisionRepository.findRecentDecisions(10),
   ])
 
   const totalPnl = recentTrades.reduce((sum, t) => sum + (t.pnl ?? 0), 0)
@@ -58,11 +60,18 @@ export default async function OverviewPage() {
       {/* approval banner — only shown when a pending decision exists */}
       {pendingDecision && <ApprovalBannerWrapper decision={pendingDecision} />}
 
-      {/* 2-col layout: 1.6fr positions | 1fr signals */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: '16px' }}>
+      {/* 3-col layout: positions | decisions | signals */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.6fr 1fr', gap: '16px' }}>
         <div>
           <div style={{ fontWeight: 600, fontSize: '12px', marginBottom: '10px' }}>Open Positions</div>
           <PositionsTable positions={openTrades} />
+        </div>
+        <div>
+          <div style={{ fontWeight: 600, fontSize: '12px', marginBottom: '10px' }}>
+            <span className="xp">AI Decision Log</span>
+            <span className="nb">What the AI is thinking</span>
+          </div>
+          <DecisionLog decisions={recentDecisions} />
         </div>
         <div>
           <div style={{ fontWeight: 600, fontSize: '12px', marginBottom: '10px' }}>Recent Signals</div>

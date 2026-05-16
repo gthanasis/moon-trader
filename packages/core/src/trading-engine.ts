@@ -26,6 +26,8 @@ interface TradingEngineConfig {
   feeRate?: number
   /** Slippage in basis points applied to paper fills. Default: 0. */
   slippageBps?: number
+  /** Trailing stop percentage below the high-water mark. Default: 0.10 (10%). */
+  trailingStopPct?: number
   /** Called whenever a position is closed, from both LLM sell decisions and stop/TP exits. */
   onPositionClosed?: (event: PositionClosedEvent) => void | Promise<void>
 }
@@ -36,9 +38,6 @@ interface ExecuteResult {
   order?: Order
 }
 
-// Trailing stop: when price makes a new high, ratchet stopLoss up to this % below the peak.
-const TRAIL_PCT = 0.10
-
 export class TradingEngine {
   private readonly guard: CapitalGuard
   private readonly positions: PositionTracker
@@ -46,10 +45,13 @@ export class TradingEngine {
   private readonly currentPrices = new Map<string, number>()
   private readonly highWaterMarks = new Map<string, number>()
   private readonly baseQty = new Map<string, number>()
-  private readonly maxPositions: number
+  // Mutable: updated at runtime via applySettings() from the web settings page.
+  private maxPositions: number
   private readonly maxSinglePositionPct: number
-  private readonly dailyLossLimitPct: number
+  // Mutable: updated at runtime via applySettings().
+  private dailyLossLimitPct: number
   private readonly feeRate: number
+  private readonly trailingStopPct: number
   private readonly onPositionClosed: ((event: PositionClosedEvent) => void | Promise<void>) | undefined
   private dailyStartCapital: number
   private currentUtcDay: number
@@ -62,9 +64,16 @@ export class TradingEngine {
     this.maxSinglePositionPct = config.maxSinglePositionPct ?? 0.25
     this.dailyLossLimitPct = config.dailyLossLimitPct ?? 0.05
     this.feeRate = config.feeRate ?? 0
+    this.trailingStopPct = config.trailingStopPct ?? 0.10
     this.onPositionClosed = config.onPositionClosed
     this.currentUtcDay = Math.floor(Date.now() / 86400000)
     this.dailyStartCapital = this.currentEquity()
+  }
+
+  /** Applies runtime-editable settings without restarting the engine. */
+  applySettings(settings: { maxPositions: number; dailyLossLimitPct: number }): void {
+    this.maxPositions = settings.maxPositions
+    this.dailyLossLimitPct = settings.dailyLossLimitPct
   }
 
   private currentEquity(): number {
@@ -132,23 +141,24 @@ export class TradingEngine {
         price: this.currentPrices.get(decision.coin),
       })
 
-      if (order.status === 'filled') {
-        if (!order.fillPrice || order.fillPrice <= 0) {
-          console.error(`[TradingEngine] Invalid fill price for ${decision.coin}: ${order.fillPrice}`)
-          return { executed: false, reason: `Invalid fill price for ${decision.coin}` }
-        }
-        this.guard.reserve(decision.size)
-        this.guard.deductFee(decision.size * this.feeRate)
-        this.baseQty.set(decision.coin, decision.size / order.fillPrice)
-        this.positions.open({
-          coin: decision.coin,
-          size: decision.size,
-          entryPrice: order.fillPrice,
-          currentPrice: order.fillPrice,
-          stopLoss: decision.stopLoss,
-          takeProfit: decision.takeProfit,
-        })
+      if (order.status !== 'filled') {
+        return { executed: false, reason: 'no fill price available' }
       }
+      if (order.fillPrice <= 0) {
+        console.error(`[TradingEngine] Invalid fill price for ${decision.coin}: ${order.fillPrice}`)
+        return { executed: false, reason: `Invalid fill price for ${decision.coin}` }
+      }
+      this.guard.reserve(decision.size)
+      this.guard.deductFee(decision.size * this.feeRate)
+      this.baseQty.set(decision.coin, decision.size / order.fillPrice)
+      this.positions.open({
+        coin: decision.coin,
+        size: decision.size,
+        entryPrice: order.fillPrice,
+        currentPrice: order.fillPrice,
+        stopLoss: decision.stopLoss,
+        takeProfit: decision.takeProfit,
+      })
 
       return { executed: true, order }
     }
@@ -169,7 +179,7 @@ export class TradingEngine {
 
       if (order.status === 'filled') {
         const grossProceeds = position.entryPrice > 0
-          ? (position.size / position.entryPrice) * (order.fillPrice ?? position.currentPrice)
+          ? (position.size / position.entryPrice) * order.fillPrice
           : position.size
         const sellFee = grossProceeds * this.feeRate
         const netProceeds = grossProceeds - sellFee
@@ -178,7 +188,7 @@ export class TradingEngine {
         this.baseQty.delete(decision.coin)
         this.currentPrices.delete(decision.coin)
         this.guard.releaseWithProceeds(position.size, netProceeds)
-        await this.onPositionClosed?.({ coin: decision.coin, fillPrice: order.fillPrice ?? position.currentPrice, pnl, reason: 'sell' })
+        await this.onPositionClosed?.({ coin: decision.coin, fillPrice: order.fillPrice, pnl, reason: 'sell' })
       }
 
       return { executed: true, order }
@@ -202,7 +212,7 @@ export class TradingEngine {
         const hwm = this.highWaterMarks.get(position.coin) ?? position.entryPrice
         if (price > hwm) {
           this.highWaterMarks.set(position.coin, price)
-          const trailedStop = price * (1 - TRAIL_PCT)
+          const trailedStop = price * (1 - this.trailingStopPct)
           if (trailedStop > position.stopLoss) {
             this.positions.updateStopLoss(position.coin, trailedStop)
           }
@@ -226,9 +236,8 @@ export class TradingEngine {
         baseQty: this.baseQty.get(current.coin),
       })
       if (order.status === 'filled') {
-        const fillPrice = order.fillPrice ?? price
         const grossProceeds = current.entryPrice > 0
-          ? (current.size / current.entryPrice) * fillPrice
+          ? (current.size / current.entryPrice) * order.fillPrice
           : current.size
         const netProceeds = grossProceeds * (1 - this.feeRate)
         const pnl = netProceeds - current.size
@@ -238,7 +247,7 @@ export class TradingEngine {
         this.baseQty.delete(current.coin)
         this.currentPrices.delete(current.coin)
         this.guard.releaseWithProceeds(current.size, netProceeds)
-        await this.onPositionClosed?.({ coin: current.coin, fillPrice, pnl, reason })
+        await this.onPositionClosed?.({ coin: current.coin, fillPrice: order.fillPrice, pnl, reason })
       }
     }
   }

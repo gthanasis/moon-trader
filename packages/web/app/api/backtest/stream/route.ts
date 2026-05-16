@@ -1,8 +1,8 @@
 import { candleRepository, backtestRunRepository, type StepDecision } from '@trader/db'
-import { OpenAIAdapter, ClaudeAdapter } from '@trader/llm'
+import { OpenAIAdapter, ClaudeAdapter, type CycleResult } from '@trader/llm'
 import { NullDataSource } from '@trader/data'
 import { BacktestRunner, type BacktestResult } from '@trader/backtest'
-import type { LLMDecision, Candle } from '@trader/shared'
+import type { Candle } from '@trader/shared'
 
 const encoder = new TextEncoder()
 
@@ -128,30 +128,27 @@ export async function GET(request: Request): Promise<Response> {
           ohlcv,
           adapter,
           intervalMs,
-          async onStep(step: number, total: number, timestamp: Date, decision: LLMDecision) {
-            decisions.push({
+          async onStep(step: number, total: number, timestamp: Date, cycleResult: CycleResult) {
+            const { decision, executedDecision, executed, reason } = cycleResult
+            // For hold, `reason` is just 'hold' — don't surface that as a blocked reason.
+            const blockedReason = !executed && decision.action !== 'hold' ? reason : undefined
+            const executedSize =
+              executed && executedDecision.size !== decision.size ? executedDecision.size : undefined
+            const stepDecision = {
               timestamp: timestamp.toISOString(),
               action: decision.action,
               coin: decision.coin,
               size: decision.size,
               confidence: decision.confidence,
               reasoning: decision.reasoning,
-            })
+              executed,
+              ...(blockedReason !== undefined && { blockedReason }),
+              ...(executedSize !== undefined && { executedSize }),
+            }
+            decisions.push(stepDecision)
             try {
               controller.enqueue(
-                sseEvent({
-                  type: 'step',
-                  step,
-                  total,
-                  timestamp: timestamp.toISOString(),
-                  decision: {
-                    action: decision.action,
-                    coin: decision.coin,
-                    size: decision.size,
-                    confidence: decision.confidence,
-                    reasoning: decision.reasoning,
-                  },
-                }),
+                sseEvent({ type: 'step', step, total, timestamp: timestamp.toISOString(), decision: stepDecision }),
               )
             } catch { /* client disconnected — runner will cancel shortly */ }
           },

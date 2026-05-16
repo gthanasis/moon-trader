@@ -13,12 +13,25 @@ export class SignalRepository {
         timestamp: s.timestamp, coins: s.coins ?? [],
         raw: s.raw !== undefined ? (s.raw as Prisma.InputJsonValue) : Prisma.DbNull,
       })),
+      skipDuplicates: true,
     })
   }
 
   async findSignalsSince(from: Date): Promise<Signal[]> {
     const rows = await this.prisma.signal.findMany({
       where: { timestamp: { gte: from } },
+      orderBy: { timestamp: 'desc' },
+    })
+    return rows.map(r => ({
+      source: r.source, type: r.type as Signal['type'], content: r.content,
+      timestamp: r.timestamp, coins: r.coins.length > 0 ? r.coins : undefined,
+      raw: r.raw ?? undefined,
+    }))
+  }
+
+  async findSignals(from: Date, to: Date): Promise<Signal[]> {
+    const rows = await this.prisma.signal.findMany({
+      where: { timestamp: { gte: from, lte: to } },
       orderBy: { timestamp: 'desc' },
     })
     return rows.map(r => ({

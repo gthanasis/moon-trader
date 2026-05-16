@@ -50,6 +50,8 @@ model LlmDecision {
   stopLoss    Float?
   takeProfit  Float?
   status      String    @default("executed")
+  // When status='blocked', the reason the engine or risk gate rejected the decision.
+  blockedReason String?
   expiresAt   DateTime?
   decidedAt   DateTime  @default(now())
   tradeId     String?
@@ -80,4 +82,24 @@ model BotState {
   id    String @id @default(cuid())
   key   String @unique
   value Json
+}
+
+model BacktestRun {
+  id             String    @id @default(cuid())
+  createdAt      DateTime  @default(now())
+  from           DateTime
+  to             DateTime
+  coins          String[]
+  model          String
+  intervalMs     Int
+  initialCapital Float
+  status         String    @default("running")
+  stats          Json?
+  trades         Json?
+  pnlCurve       Json?
+  decisions      Json?
+  errorMessage   String?
+
+  @@index([createdAt])
+  @@index([status])
 }

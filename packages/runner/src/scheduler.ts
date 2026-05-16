@@ -8,11 +8,14 @@ interface CycleLike {
 export class Scheduler {
   private task: ScheduledTask | null = null
   private isRunning = false
+  private cronExpression: string
 
   constructor(
     private readonly cycle: CycleLike,
-    private readonly cronExpression: string,
-  ) {}
+    cronExpression: string,
+  ) {
+    this.cronExpression = cronExpression
+  }
 
   start(): void {
     this.task = cron.schedule(this.cronExpression, () => {
@@ -23,6 +26,21 @@ export class Scheduler {
   stop(): void {
     this.task?.stop()
     this.task = null
+  }
+
+  /** The cron expression the scheduler is currently running on. */
+  get expression(): string {
+    return this.cronExpression
+  }
+
+  /** Restarts the scheduled task on a new cron expression. No-op if unchanged. */
+  reschedule(cronExpression: string): void {
+    if (cronExpression === this.cronExpression) return
+    this.cronExpression = cronExpression
+    if (this.task) {
+      this.stop()
+      this.start()
+    }
   }
 
   private async tick(): Promise<void> {

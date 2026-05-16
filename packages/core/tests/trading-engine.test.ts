@@ -77,12 +77,12 @@ describe('TradingEngine', () => {
     expect(engine.availableCapital()).toBeCloseTo(960, 0)
   })
 
-  it('rejects a buy and leaves capital unchanged when fill price is zero', async () => {
-    // No updatePositionPrice call → market price unknown → paper fill = 0
+  it('rejects a buy and leaves capital unchanged when no market price is known', async () => {
+    // No updatePositionPrice call → currentPrices has no entry → OrderManager gets price: undefined → open order (not filled)
     const result = await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy' })
 
     expect(result.executed).toBe(false)
-    expect(result.reason).toMatch(/invalid fill price/i)
+    expect(result.reason).toMatch(/no fill price/i)
     expect(engine.getPositions()).toHaveLength(0)
     expect(engine.availableCapital()).toBe(1000) // capital must be untouched
   })

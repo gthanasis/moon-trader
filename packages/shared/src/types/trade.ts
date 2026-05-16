@@ -1,17 +1,18 @@
 export type OrderSide = 'buy' | 'sell'
-export type OrderStatus = 'open' | 'filled' | 'cancelled'
 
-export interface Order {
+type OrderCommon = {
   id: string
   coin: string
   side: OrderSide
   size: number
   price?: number
-  status: OrderStatus
   createdAt: Date
-  filledAt?: Date
-  fillPrice?: number
 }
+
+export type Order =
+  | (OrderCommon & { status: 'open' })
+  | (OrderCommon & { status: 'filled'; fillPrice: number; filledAt: Date })
+  | (OrderCommon & { status: 'cancelled' })
 
 export interface Position {
   coin: string

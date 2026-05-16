@@ -2,14 +2,78 @@ import { randomUUID } from 'crypto'
 import { writeFileSync, unlinkSync } from 'fs'
 import ccxt from 'ccxt'
 import { ClaudeAdapter, OpenAIAdapter, EvaluationCycle } from '@trader/llm'
+import type { CycleResult } from '@trader/llm'
 import { TradingEngine, CcxtExchangeAdapter } from '@trader/core'
 import { Pipeline, BinanceSource, FearAndGreedSource, RssNewsSource } from '@trader/data'
-import { getPrismaClient, TradeRepository, DecisionRepository, SignalRepository, CandleRepository } from '@trader/db'
+import { getPrismaClient, TradeRepository, DecisionRepository, SignalRepository, CandleRepository, botStateRepository } from '@trader/db'
+import { intervalToCron } from '@trader/shared'
 import { startBot } from '@trader/bot'
 import { Scheduler } from './scheduler.js'
 import type { LiveConfig } from './config.js'
 
 const PID_FILE = '.trader.pid'
+
+/**
+ * Resolves the shared `paused` flag from BotState. Written by the web toggle
+ * and the Telegram /pause /resume commands. Fails open: a transient DB error
+ * must not silently halt trading.
+ */
+export async function isBotPaused(): Promise<boolean> {
+  try {
+    return (await botStateRepository.get('paused')) === true
+  } catch (err) {
+    console.error('[LiveTrader] Failed to read paused flag — assuming not paused:', err)
+    return false
+  }
+}
+
+export async function runCycleWithPersistence(
+  cycle: EvaluationCycle,
+  engine: TradingEngine,
+  decisionRepo: DecisionRepository,
+  tradeRepo: TradeRepository,
+  paper: boolean,
+  isPaused: () => Promise<boolean> = isBotPaused,
+): Promise<CycleResult | null> {
+  if (await isPaused()) {
+    console.log(`[Cycle] ${new Date().toISOString()} — skipped: bot paused`)
+    return null
+  }
+
+  const result = await cycle.run()
+  const status = result.executed ? 'executed' : 'blocked'
+  // 'hold' is not a rejection — don't surface it as a blocked reason.
+  const blockedReason = !result.executed && result.decision.action !== 'hold' ? (result.reason ?? null) : null
+  console.log(`[Cycle] ${new Date().toISOString()} — ${result.decision.action.toUpperCase()} ${result.decision.coin} confidence=${result.decision.confidence.toFixed(2)} ${status} ${result.reason ?? ''}`.trimEnd())
+
+  const decisionId = await decisionRepo.saveDecision(result.decision, status, blockedReason).catch(err => {
+    console.error('[LiveTrader] Failed to persist decision:', err)
+    return null
+  })
+
+  // Persist a new open trade row when a buy fills.
+  // Sells and stop/TP exits are persisted via engine.onPositionClosed (fires immediately on close).
+  if (result.executed && result.executedDecision.action === 'buy' && decisionId) {
+    const position = engine.getPositions().find(p => p.coin === result.executedDecision.coin)
+    const trade = {
+      id: randomUUID(),
+      coin: result.executedDecision.coin,
+      side: 'buy' as const,
+      size: position?.size ?? result.executedDecision.size,
+      entryPrice: position?.entryPrice ?? 0,
+      openedAt: new Date(),
+      reasoning: result.decision.reasoning,
+    }
+    await tradeRepo.saveTrade(trade, paper ? 'paper' : 'live').catch(err => {
+      console.error('[LiveTrader] Failed to persist trade:', err)
+    })
+    await decisionRepo.linkDecisionToTrade(decisionId, trade.id).catch(err => {
+      console.error('[LiveTrader] Failed to link decision to trade:', err)
+    })
+  }
+
+  return result
+}
 
 export interface LiveTraderHandle {
   stop(): void
@@ -120,44 +184,32 @@ export function startLiveTrader(config: LiveConfig): LiveTraderHandle {
       : undefined,
   })
 
-  const persistingCycle = {
-    run: async () => {
-      const result = await cycle.run()
-      const status = result.executed ? 'executed' : 'blocked'
-      console.log(`[Cycle] ${new Date().toISOString()} — ${result.decision.action.toUpperCase()} ${result.decision.coin} confidence=${result.decision.confidence.toFixed(2)} ${status} ${result.reason ?? ''}`.trimEnd())
-
-      // Persist the LLM's raw decision with its actual execution status.
-      const decisionId = await decisionRepo.saveDecision(result.decision, status).catch(err => {
-        console.error('[LiveTrader] Failed to persist decision:', err)
-        return null
-      })
-
-      // Persist a new open trade row when a buy fills.
-      // Sells and stop/TP exits are persisted via engine.onPositionClosed (fires immediately on close).
-      if (result.executed && result.executedDecision.action === 'buy' && decisionId) {
-        const position = engine.getPositions().find(p => p.coin === result.executedDecision.coin)
-        const trade = {
-          id: randomUUID(),
-          coin: result.executedDecision.coin,
-          side: 'buy' as const,
-          size: position?.size ?? result.executedDecision.size,
-          entryPrice: position?.entryPrice ?? 0,
-          openedAt: new Date(),
-          reasoning: result.decision.reasoning,
-        }
-        await tradeRepo.saveTrade(trade, config.paper ? 'paper' : 'live').catch(err => {
-          console.error('[LiveTrader] Failed to persist trade:', err)
-        })
-        await decisionRepo.linkDecisionToTrade(decisionId, trade.id).catch(err => {
-          console.error('[LiveTrader] Failed to link decision to trade:', err)
-        })
-      }
-
-      return result
-    },
+  // Pulls runtime-editable settings from the web settings page (BotState table)
+  // and applies them in place. Fails open: a DB error must not halt trading.
+  async function applyRuntimeSettings(): Promise<void> {
+    try {
+      const settings = await botStateRepository.getSettings()
+      engine.applySettings(settings)
+      cycle.applySettings(settings)
+      scheduler.reschedule(intervalToCron(settings.runIntervalMinutes))
+    } catch (err) {
+      console.error('[LiveTrader] Failed to apply runtime settings — keeping current values:', err)
+    }
   }
-  const scheduler = new Scheduler(persistingCycle, config.cronExpression)
+
+  const scheduler = new Scheduler(
+    {
+      run: async () => {
+        await applyRuntimeSettings()
+        return runCycleWithPersistence(cycle, engine, decisionRepo, tradeRepo, config.paper)
+      },
+    },
+    config.cronExpression,
+  )
   scheduler.start()
+  // Apply persisted settings immediately so the first cycle and the schedule
+  // reflect the web UI without waiting for an env-default-cadence tick.
+  void applyRuntimeSettings()
 
   try { writeFileSync(PID_FILE, String(process.pid)) } catch { /* ignore */ }
 

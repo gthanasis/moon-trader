@@ -6,6 +6,8 @@ export { DecisionRepository } from './repositories/decision-repository.js'
 export type { StoredDecision } from './repositories/decision-repository.js'
 export { CandleRepository } from './repositories/candle-repository.js'
 export { BotStateRepository } from './repositories/bot-state-repository.js'
+export { BacktestRunRepository } from './repositories/backtest-run-repository.js'
+export type { BacktestRunConfig, BacktestRunSummary, BacktestRunDetail, StepDecision } from './repositories/backtest-run-repository.js'
 
 import { getPrismaClient } from './client.js'
 import { TradeRepository } from './repositories/trade-repository.js'
@@ -13,9 +15,11 @@ import { SignalRepository } from './repositories/signal-repository.js'
 import { DecisionRepository } from './repositories/decision-repository.js'
 import { CandleRepository } from './repositories/candle-repository.js'
 import { BotStateRepository } from './repositories/bot-state-repository.js'
+import { BacktestRunRepository } from './repositories/backtest-run-repository.js'
 
 export const tradeRepository = new TradeRepository(getPrismaClient())
 export const signalRepository = new SignalRepository(getPrismaClient())
 export const decisionRepository = new DecisionRepository(getPrismaClient())
 export const candleRepository = new CandleRepository(getPrismaClient())
 export const botStateRepository = new BotStateRepository(getPrismaClient())
+export const backtestRunRepository = new BacktestRunRepository(getPrismaClient())

@@ -96,7 +96,7 @@ Use the make_trading_decision tool to submit exactly one decision per analysis c
     : context.positions
         .map(p => {
           const pct = ((p.currentPrice - p.entryPrice) / p.entryPrice) * 100
-          return `- ${p.coin}: $${p.size.toFixed(2)} at $${p.entryPrice} (current: $${p.currentPrice}, ${pct.toFixed(1)}%)`
+          return `- ${p.coin}: $${p.size.toFixed(2)} at $${p.entryPrice.toFixed(2)} (current: $${p.currentPrice.toFixed(2)}, ${pct.toFixed(1)}%)`
         })
         .join('\n')
 

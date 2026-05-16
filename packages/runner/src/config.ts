@@ -57,7 +57,7 @@ export function loadConfig(): LiveConfig {
     coins: (process.env['COINS'] ?? 'BTC/USDT,ETH/USDT').split(','),
     timeframe: process.env['TIMEFRAME'] ?? '15m',
     ohlcvLimit: parseNumber('OHLCV_LIMIT', 100, 0),
-    cronExpression: process.env['CRON_EXPRESSION'] ?? '*/15 * * * *',
+    cronExpression: process.env['CRON_EXPRESSION'] ?? '0 * * * *',
     paper: process.env['PAPER'] !== 'false',
     telegramBotToken: process.env['TELEGRAM_BOT_TOKEN'],
     telegramChatId: process.env['TELEGRAM_CHAT_ID'],

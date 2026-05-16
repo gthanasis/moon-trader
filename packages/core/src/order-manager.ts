@@ -31,63 +31,54 @@ export class OrderManager {
   }
 
   async place(input: PlaceOrderInput): Promise<Order> {
-    const order: Order = {
+    const common = {
       id: randomUUID(),
       coin: input.coin,
       side: input.side,
       size: input.size,
       price: input.price,
-      status: 'open',
       createdAt: new Date(),
     }
 
     if (this.paper) {
-      order.status = 'filled'
-      order.filledAt = new Date()
+      if (input.price === undefined) {
+        const order: Order = { ...common, status: 'open' }
+        this.orders.set(order.id, order)
+        return order
+      }
       const slip = this.slippageBps / 10000
-      order.fillPrice = input.price !== undefined
-        ? input.side === 'buy'
-          ? input.price * (1 + slip)
-          : input.price * (1 - slip)
-        : input.price
-    } else if (this.exchange) {
+      const fillPrice = input.side === 'buy'
+        ? input.price * (1 + slip)
+        : input.price * (1 - slip)
+      const order: Order = { ...common, status: 'filled', fillPrice, filledAt: new Date() }
+      this.orders.set(order.id, order)
+      return order
+    }
+
+    if (this.exchange) {
       if (input.side === 'buy') {
         const result = await this.exchange.marketBuy(input.coin, input.size)
-        order.status = 'filled'
-        order.filledAt = result.filledAt
-        order.fillPrice = result.fillPrice
+        const order: Order = { ...common, status: 'filled', fillPrice: result.fillPrice, filledAt: result.filledAt }
+        this.orders.set(order.id, order)
+        return order
       } else {
         const baseAmount = input.baseQty ?? (input.price !== undefined ? input.size / input.price : undefined)
         if (baseAmount === undefined) {
           throw new Error(`baseQty or price is required for live sell orders on ${input.coin}`)
         }
         const result = await this.exchange.marketSell(input.coin, baseAmount)
-        order.status = 'filled'
-        order.filledAt = result.filledAt
-        order.fillPrice = result.fillPrice
+        const order: Order = { ...common, status: 'filled', fillPrice: result.fillPrice, filledAt: result.filledAt }
+        this.orders.set(order.id, order)
+        return order
       }
     }
 
+    const order: Order = { ...common, status: 'open' }
     this.orders.set(order.id, order)
     return order
   }
 
-  async cancel(orderId: string): Promise<void> {
-    const order = this.orders.get(orderId)
-    if (order && order.status !== 'cancelled') {
-      this.orders.set(orderId, { ...order, status: 'cancelled' })
-    }
-  }
-
-  getOrder(orderId: string): Order | undefined {
-    return this.orders.get(orderId)
-  }
-
   getOpenOrders(): Order[] {
     return Array.from(this.orders.values()).filter(o => o.status === 'open')
-  }
-
-  getAllOrders(): Order[] {
-    return Array.from(this.orders.values())
   }
 }

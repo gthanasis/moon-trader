@@ -14,7 +14,8 @@
     "dev": "tsx watch src/main.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "start": "node dist/main.js"
+    "start": "node dist/main.js",
+    "data-loader": "tsx src/data-loader.ts"
   },
   "dependencies": {
     "@trader/bot": "workspace:*",

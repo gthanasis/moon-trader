@@ -1,9 +1,7 @@
 import type { PrismaClient } from '@prisma/client'
+import type { BacktestStats, BacktestTrade, PnlPoint, BacktestResult } from '@trader/shared'
 
-interface BacktestStats { totalPnl: number; winRate: number; maxDrawdown: number; sharpeRatio: number; avgHoldTimeMs: number; totalTrades: number }
-interface BacktestTrade { coin: string; side: string; size: number; entryPrice: number; exitPrice?: number; openedAt: Date; closedAt?: Date; pnl?: number; reasoning: string }
-interface PnlPoint { timestamp: Date; capital: number }
-interface BacktestResult { trades: BacktestTrade[]; stats: BacktestStats; pnlCurve: PnlPoint[] }
+export type { BacktestStats, BacktestTrade, PnlPoint, BacktestResult }
 
 export interface BacktestRunConfig {
   from: Date
@@ -18,9 +16,16 @@ export interface StepDecision {
   timestamp: string
   action: string
   coin: string
+  /** Size proposed by the LLM (before risk-based sizing). */
   size: number
   confidence: number
   reasoning: string
+  /** Whether the decision actually reached the engine and filled. False for hold/blocked. */
+  executed?: boolean
+  /** When `executed` is false and action !== 'hold', the reason it was blocked. */
+  blockedReason?: string
+  /** Size after risk-based sizing — what was actually sent to the engine. May differ from `size`. */
+  executedSize?: number
 }
 
 export interface BacktestRunSummary {

@@ -76,7 +76,7 @@ describe('loadConfig', () => {
       expect(config.coins).toEqual(['BTC/USDT', 'ETH/USDT'])
       expect(config.timeframe).toBe('15m')
       expect(config.paper).toBe(true)
-      expect(config.cronExpression).toBe('*/15 * * * *')
+      expect(config.cronExpression).toBe('0 * * * *')
     })
   })
 

@@ -6,7 +6,7 @@ export interface PipelineLike {
 }
 
 export interface EngineLike {
-  execute(decision: LLMDecision): Promise<{ executed: boolean; reason?: string; order?: { fillPrice?: number } }>
+  execute(decision: LLMDecision): Promise<{ executed: boolean; reason?: string; order?: Order }>
   updatePositionPrice(coin: string, price: number): void
   checkStopLosses(): Promise<void>
   getPositions(): Position[]
@@ -59,6 +59,13 @@ export class EvaluationCycle {
 
   constructor(config: EvaluationCycleConfig) {
     this.config = config
+  }
+
+  /** Applies runtime-editable settings without rebuilding the cycle. */
+  applySettings(settings: { minConfidence: number; riskPerTradePct: number; autoTradeLimit: number }): void {
+    this.config.minConfidence = settings.minConfidence
+    this.config.riskPerTradePct = settings.riskPerTradePct
+    this.config.autoTradeLimit = settings.autoTradeLimit
   }
 
   async run(): Promise<CycleResult> {
@@ -136,11 +143,12 @@ export class EvaluationCycle {
     const result = await engine.execute(executedDecision)
 
     if (result.executed && notifier) {
+      const fillPrice = result.order?.status === 'filled' ? result.order.fillPrice : 0
       await notifier.tradeExecuted({
         coin: executedDecision.coin,
         side: executedDecision.action as 'buy' | 'sell',
         size: executedDecision.size,
-        fillPrice: result.order?.fillPrice ?? 0,
+        fillPrice,
         reasoning: executedDecision.reasoning,
       })
     }

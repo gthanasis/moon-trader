@@ -1,3 +1,5 @@
 export * from './types/signal.js'
 export * from './types/trade.js'
 export * from './types/decision.js'
+export * from './types/backtest.js'
+export * from './types/settings.js'

@@ -45,9 +45,4 @@ export class PositionTracker {
     }
   }
 
-  unrealizedPnl(coin: string): number {
-    const position = this.positions.get(coin)
-    if (!position) return 0
-    return ((position.currentPrice - position.entryPrice) / position.entryPrice) * 100
-  }
 }

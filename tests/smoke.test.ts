@@ -29,7 +29,7 @@ describe('Integration smoke test', () => {
     expect(engine.availableCapital()).toBe(400)
   })
 
-  it('TradingEngine respects capital cap', async () => {
+  it('TradingEngine rejects an oversized buy', async () => {
     const engine = new TradingEngine({ totalCapital: 100, paper: true })
 
     const result = await engine.execute({
@@ -41,6 +41,8 @@ describe('Integration smoke test', () => {
     })
 
     expect(result.executed).toBe(false)
+    // size 200 > 25% of capital (25) → maxSinglePositionPct triggers before capital check
+    expect(result.reason).toMatch(/exceeds max single position/)
     expect(engine.availableCapital()).toBe(100)
   })
 })

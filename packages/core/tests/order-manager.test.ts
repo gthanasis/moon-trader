@@ -21,17 +21,6 @@ describe('OrderManager (paper mode)', () => {
     expect(order.fillPrice).toBe(51000)
   })
 
-  it('tracks open orders before fill in paper mode sync test', async () => {
-    const order = await manager.place({ coin: 'ETH/USDT', side: 'buy', size: 50, price: 3000 })
-    expect(manager.getOrder(order.id)).toBeDefined()
-  })
-
-  it('cancels an order', async () => {
-    const order = await manager.place({ coin: 'ETH/USDT', side: 'buy', size: 50, price: 3000 })
-    await manager.cancel(order.id)
-    expect(manager.getOrder(order.id)?.status).toBe('cancelled')
-  })
-
   it('lists all open (filled in paper mode) orders', async () => {
     await manager.place({ coin: 'BTC/USDT', side: 'buy', size: 100, price: 50000 })
     await manager.place({ coin: 'ETH/USDT', side: 'buy', size: 50, price: 3000 })

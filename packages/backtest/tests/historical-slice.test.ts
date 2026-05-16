@@ -16,7 +16,7 @@ const t2 = new Date('2024-01-01T02:00:00Z')
 const t3 = new Date('2024-01-01T03:00:00Z')
 
 describe('historicalSlice', () => {
-  it('includes only signals at or before currentTime', () => {
+  it('includes only signals strictly before currentTime (no look-ahead)', () => {
     const signals: Signal[] = [
       makeSignal('a', t0),
       makeSignal('b', t1),

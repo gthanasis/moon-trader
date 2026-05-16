@@ -1,4 +1,8 @@
 import type { PrismaClient } from '@prisma/client'
+import { type BotSettings, normalizeBotSettings } from '@trader/shared'
+
+/** BotState key under which runtime-editable settings are stored. */
+const SETTINGS_KEY = 'settings'
 
 export class BotStateRepository {
   constructor(private readonly prisma: PrismaClient) {}
@@ -14,5 +18,15 @@ export class BotStateRepository {
       create: { key, value: value as object },
       update: { value: value as object },
     })
+  }
+
+  /** Reads runtime settings, falling back to defaults for any missing/invalid field. */
+  async getSettings(): Promise<BotSettings> {
+    return normalizeBotSettings(await this.get(SETTINGS_KEY))
+  }
+
+  /** Persists runtime settings after normalizing them against the allowed bounds. */
+  async setSettings(settings: BotSettings): Promise<void> {
+    await this.set(SETTINGS_KEY, normalizeBotSettings(settings))
   }
 }

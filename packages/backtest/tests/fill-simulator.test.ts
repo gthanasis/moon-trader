@@ -53,4 +53,26 @@ describe('getFillPrice', () => {
 
     expect(price).toBe(160)
   })
+
+  it('returns undefined when gap to next candle exceeds 2× expectedIntervalMs', () => {
+    const intervalMs = 60 * 60 * 1000 // 1h
+    // next candle is 3h after afterTime (> 2× interval)
+    const afterTime = t0
+    const nextCandle = makeCandle(t3, 200) // t3 = t0 + 3h
+
+    const price = getFillPrice([nextCandle], afterTime, intervalMs)
+
+    expect(price).toBeUndefined()
+  })
+
+  it('returns price when gap to next candle is within 2× expectedIntervalMs', () => {
+    const intervalMs = 60 * 60 * 1000 // 1h
+    // next candle is 1h after afterTime (= 1× interval, within 2×)
+    const afterTime = t0
+    const nextCandle = makeCandle(t1, 200) // t1 = t0 + 1h
+
+    const price = getFillPrice([nextCandle], afterTime, intervalMs)
+
+    expect(price).toBe(200)
+  })
 })

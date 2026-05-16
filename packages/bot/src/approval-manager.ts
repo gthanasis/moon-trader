@@ -18,7 +18,7 @@ export class ApprovalManager {
   private readonly timeoutMs: number
   private readonly pending = new Map<string, PendingApproval>()
   // Buffer callbacks that arrive before the pending entry is registered
-  private readonly earlyCallbacks = new Map<string, { data: string; answerCallbackQuery: () => Promise<void> }>()
+  private readonly earlyCallbacks = new Map<string, { data: string; answerCallbackQuery: () => Promise<unknown> }>()
 
   constructor(botToken: string, chatId: string, config: ApprovalManagerConfig = {}) {
     this.bot = new Bot(botToken)

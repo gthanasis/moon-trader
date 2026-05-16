@@ -35,8 +35,4 @@ describe('PositionTracker', () => {
     expect(tracker.close('SOL/USDT')).toBeUndefined()
   })
 
-  it('calculates unrealized PnL', () => {
-    tracker.open({ coin: 'BTC/USDT', size: 100, entryPrice: 50000, currentPrice: 55000 })
-    expect(tracker.unrealizedPnl('BTC/USDT')).toBeCloseTo(10)
-  })
 })

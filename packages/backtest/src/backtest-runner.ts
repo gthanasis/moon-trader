@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto'
 import type { Signal, TradingContext, Candle, Position, Order, Trade } from '@trader/shared'
 import type { LLMDecision } from '@trader/shared'
 import { EvaluationCycle } from '@trader/llm'
@@ -57,12 +58,24 @@ class HistoricalPipeline implements PipelineLike {
   }
 }
 
+interface SimulatedEngineConfig {
+  initialCapital: number
+  autoTradeLimit: number
+  coins: string[]
+  ohlcv: Record<string, Candle[]>
+  intervalMs: number
+  feeRate: number
+  slippageBps: number
+  maxPositions: number
+  dailyLossLimitPct: number
+  maxSinglePositionPct: number
+  trailingStopPct: number
+}
+
 /**
  * Simulates exchange order execution for backtesting.
  * Implements EngineLike so EvaluationCycle drives the same decision loop as live trading.
  */
-const TRAIL_PCT = 0.10
-
 class SimulatedEngine implements EngineLike {
   private capital: number
   // Open positions (always side='buy'). Sells close LIFO.
@@ -75,20 +88,9 @@ class SimulatedEngine implements EngineLike {
   private dailyStartCapital: number
   private currentUtcDay = -1
 
-  constructor(
-    initialCapital: number,
-    private readonly autoTradeLimit: number,
-    private readonly coins: string[],
-    private readonly ohlcv: Record<string, Candle[]>,
-    private readonly intervalMs: number,
-    private readonly feeRate: number,
-    private readonly slippageBps: number,
-    private readonly maxPositions: number,
-    private readonly dailyLossLimitPct: number,
-    private readonly maxSinglePositionPct: number,
-  ) {
-    this.capital = initialCapital
-    this.dailyStartCapital = initialCapital
+  constructor(private readonly cfg: SimulatedEngineConfig) {
+    this.capital = cfg.initialCapital
+    this.dailyStartCapital = cfg.initialCapital
   }
 
   setTime(t: Date) { this.currentTime = t }
@@ -96,7 +98,7 @@ class SimulatedEngine implements EngineLike {
   private currentEquity(): number {
     const ts = this.currentTime.getTime()
     const openValue = this.openPositions.reduce((sum, p) => {
-      const price = lastCandleAtOrBefore(this.ohlcv[p.coin] ?? [], ts)?.close ?? p.entryPrice
+      const price = lastCandleAtOrBefore(this.cfg.ohlcv[p.coin] ?? [], ts)?.close ?? p.entryPrice
       return sum + (p.size / p.entryPrice) * price
     }, 0)
     return this.capital + openValue
@@ -118,7 +120,7 @@ class SimulatedEngine implements EngineLike {
       coin: p.coin,
       size: p.size,
       entryPrice: p.entryPrice,
-      currentPrice: lastCandleAtOrBefore(this.ohlcv[p.coin] ?? [], ts)?.close ?? p.entryPrice,
+      currentPrice: lastCandleAtOrBefore(this.cfg.ohlcv[p.coin] ?? [], ts)?.close ?? p.entryPrice,
       openedAt: p.openedAt,
     }))
   }
@@ -130,8 +132,8 @@ class SimulatedEngine implements EngineLike {
   // No-op: SimulatedEngine computes current price live from candles in getPositions().
   updatePositionPrice(_coin: string, _price: number): void {}
 
-  async execute(decision: LLMDecision): Promise<{ executed: boolean; reason?: string; order?: { fillPrice?: number } }> {
-    if (!this.coins.includes(decision.coin)) {
+  async execute(decision: LLMDecision): Promise<{ executed: boolean; reason?: string; order?: Order }> {
+    if (!this.cfg.coins.includes(decision.coin)) {
       return { executed: false, reason: 'unknown coin' }
     }
 
@@ -141,25 +143,25 @@ class SimulatedEngine implements EngineLike {
       if (this.openPositions.some(p => p.coin === decision.coin)) {
         return { executed: false, reason: `Position already open for ${decision.coin}` }
       }
-      if (this.openPositions.length >= this.maxPositions) {
-        return { executed: false, reason: `Max positions reached (${this.maxPositions})` }
+      if (this.openPositions.length >= this.cfg.maxPositions) {
+        return { executed: false, reason: `Max positions reached (${this.cfg.maxPositions})` }
       }
       const dailyDrawdown = this.dailyStartCapital - this.currentEquity()
-      if (dailyDrawdown > this.dailyStartCapital * this.dailyLossLimitPct) {
+      if (dailyDrawdown > this.dailyStartCapital * this.cfg.dailyLossLimitPct) {
         const lossPct = (dailyDrawdown / this.dailyStartCapital * 100).toFixed(1)
         return { executed: false, reason: `Daily loss limit hit: lost ${lossPct}% today` }
       }
-      const maxSize = this.capital * this.maxSinglePositionPct
+      const maxSize = this.capital * this.cfg.maxSinglePositionPct
       if (decision.size > maxSize) {
-        return { executed: false, reason: `Size ${decision.size.toFixed(2)} exceeds max single position (${(this.maxSinglePositionPct * 100).toFixed(0)}% of capital = ${maxSize.toFixed(2)})` }
+        return { executed: false, reason: `Size ${decision.size.toFixed(2)} exceeds max single position (${(this.cfg.maxSinglePositionPct * 100).toFixed(0)}% of capital = ${maxSize.toFixed(2)})` }
       }
       if (this.capital < decision.size) return { executed: false, reason: 'insufficient capital' }
-      const tradeSize = Math.min(decision.size, this.autoTradeLimit)
-      const rawFill = getFillPrice(this.ohlcv[decision.coin] ?? [], this.currentTime, this.intervalMs)
+      const tradeSize = Math.min(decision.size, this.cfg.autoTradeLimit)
+      const rawFill = getFillPrice(this.cfg.ohlcv[decision.coin] ?? [], this.currentTime, this.cfg.intervalMs)
       if (rawFill === undefined) return { executed: false, reason: 'no fill price available' }
       // Buys slip upward (we pay more than the quoted open).
-      const fillPrice = rawFill * (1 + this.slippageBps / 10000)
-      const entryFee = tradeSize * this.feeRate
+      const fillPrice = rawFill * (1 + this.cfg.slippageBps / 10000)
+      const entryFee = tradeSize * this.cfg.feeRate
       const trade: BacktestTrade = {
         coin: decision.coin,
         side: 'buy',
@@ -175,7 +177,8 @@ class SimulatedEngine implements EngineLike {
       this.highWaterMarks.set(decision.coin, fillPrice)
       this.trades.push(trade)
       this.openPositions.push(trade)
-      return { executed: true, order: { fillPrice } }
+      const buyOrder: Order = { id: randomUUID(), coin: decision.coin, side: 'buy', size: tradeSize, createdAt: this.currentTime, status: 'filled', fillPrice, filledAt: this.currentTime }
+      return { executed: true, order: buyOrder }
     }
 
     if (decision.action === 'sell') {
@@ -186,10 +189,13 @@ class SimulatedEngine implements EngineLike {
         if (this.openPositions[i].coin === decision.coin) { posIndex = i; break }
       }
       if (posIndex === -1) return { executed: false, reason: 'no open position' }
-      const rawFill = getFillPrice(this.ohlcv[decision.coin] ?? [], this.currentTime, this.intervalMs)
+      const rawFill = getFillPrice(this.cfg.ohlcv[decision.coin] ?? [], this.currentTime, this.cfg.intervalMs)
       if (rawFill === undefined) return { executed: false, reason: 'no fill price available' }
+      const pos = this.openPositions[posIndex]
       this.closePosition(posIndex, rawFill, this.currentTime)
-      return { executed: true, order: { fillPrice: rawFill } }
+      const sellFillPrice = rawFill * (1 - this.cfg.slippageBps / 10000)
+      const sellOrder: Order = { id: randomUUID(), coin: decision.coin, side: 'sell', size: pos.size, createdAt: this.currentTime, status: 'filled', fillPrice: sellFillPrice, filledAt: this.currentTime }
+      return { executed: true, order: sellOrder }
     }
 
     return { executed: false, reason: 'hold' }
@@ -198,10 +204,10 @@ class SimulatedEngine implements EngineLike {
   private closePosition(posIndex: number, rawFill: number, closeTime: Date): void {
     const pos = this.openPositions[posIndex]
     // Sells slip downward (we receive less than the quoted open).
-    const fillPrice = rawFill * (1 - this.slippageBps / 10000)
+    const fillPrice = rawFill * (1 - this.cfg.slippageBps / 10000)
     const units = pos.size / pos.entryPrice
     const proceeds = units * fillPrice
-    const exitFee = proceeds * this.feeRate
+    const exitFee = proceeds * this.cfg.feeRate
     pos.exitPrice = fillPrice
     pos.closedAt = closeTime
     pos.fees += exitFee
@@ -216,7 +222,7 @@ class SimulatedEngine implements EngineLike {
     const ts = this.currentTime.getTime()
     for (let i = this.openPositions.length - 1; i >= 0; i--) {
       const pos = this.openPositions[i]
-      const candle = lastCandleAtOrBefore(this.ohlcv[pos.coin] ?? [], ts)
+      const candle = lastCandleAtOrBefore(this.cfg.ohlcv[pos.coin] ?? [], ts)
 
       // Take-profit: check candle high against target; fill at the target price.
       if (pos.takeProfit !== undefined && candle && candle.high >= pos.takeProfit) {
@@ -230,7 +236,7 @@ class SimulatedEngine implements EngineLike {
         const hwm = this.highWaterMarks.get(pos.coin) ?? pos.entryPrice
         if (candle.close > hwm) {
           this.highWaterMarks.set(pos.coin, candle.close)
-          const trailedStop = candle.close * (1 - TRAIL_PCT)
+          const trailedStop = candle.close * (1 - this.cfg.trailingStopPct)
           if (trailedStop > pos.stopLoss) pos.stopLoss = trailedStop
         }
       }
@@ -248,7 +254,7 @@ class SimulatedEngine implements EngineLike {
   pushPnlPoint(timestamp: Date): void {
     const ts = timestamp.getTime()
     const openValue = this.openPositions.reduce((sum, p) => {
-      const price = lastCandleAtOrBefore(this.ohlcv[p.coin] ?? [], ts)?.close ?? p.entryPrice
+      const price = lastCandleAtOrBefore(this.cfg.ohlcv[p.coin] ?? [], ts)?.close ?? p.entryPrice
       return sum + (p.size / p.entryPrice) * price
     }, 0)
     this.pnlCurve.push({ timestamp, capital: this.capital + openValue })
@@ -257,7 +263,7 @@ class SimulatedEngine implements EngineLike {
   forceCloseAll(endTime: Date): void {
     for (let i = this.openPositions.length - 1; i >= 0; i--) {
       const pos = this.openPositions[i]
-      const lastCandle = this.ohlcv[pos.coin]?.at(-1)
+      const lastCandle = this.cfg.ohlcv[pos.coin]?.at(-1)
       if (lastCandle) this.closePosition(i, lastCandle.close, endTime)
     }
     this.pnlCurve.push({ timestamp: endTime, capital: this.capital })
@@ -265,14 +271,14 @@ class SimulatedEngine implements EngineLike {
 }
 
 export class BacktestRunner {
-  private _cancelled = false
+  #cancelled = false
 
   constructor(private readonly config: BacktestConfig) {}
 
   /** Signal the run loop to stop after the current step. */
-  cancel(): void { this._cancelled = true }
+  cancel(): void { this.#cancelled = true }
 
-  get wasCancelled(): boolean { return this._cancelled }
+  get wasCancelled(): boolean { return this.#cancelled }
 
   async run(): Promise<BacktestResult> {
     const { from, to, initialCapital, autoTradeLimit, coins, sources, ohlcv, adapter } = this.config
@@ -293,12 +299,20 @@ export class BacktestRunner {
     }
     allSignals.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
 
-    const maxPositions = this.config.maxPositions ?? 5
-    const dailyLossLimitPct = this.config.dailyLossLimitPct ?? 0.05
-    const maxSinglePositionPct = this.config.maxSinglePositionPct ?? 0.25
-
     const pipeline = new HistoricalPipeline(allSignals, ohlcv)
-    const engine = new SimulatedEngine(initialCapital, autoTradeLimit, coins, ohlcv, intervalMs, feeRate, slippageBps, maxPositions, dailyLossLimitPct, maxSinglePositionPct)
+    const engine = new SimulatedEngine({
+      initialCapital,
+      autoTradeLimit,
+      coins,
+      ohlcv,
+      intervalMs,
+      feeRate,
+      slippageBps,
+      maxPositions: this.config.maxPositions ?? 5,
+      dailyLossLimitPct: this.config.dailyLossLimitPct ?? 0.05,
+      maxSinglePositionPct: this.config.maxSinglePositionPct ?? 0.25,
+      trailingStopPct: this.config.trailingStopPct ?? 0.10,
+    })
 
     // EvaluationCycle is the single decision loop shared with the live runner.
     // getRecentTrades wires the same context the live runner provides via DB.
@@ -320,17 +334,17 @@ export class BacktestRunner {
     const total = Math.ceil((end - current) / intervalMs)
     let step = 1
 
-    while (current < end && !this._cancelled) {
+    while (current < end && !this.#cancelled) {
       const currentTime = new Date(current)
       pipeline.setTime(currentTime)
       engine.setTime(currentTime)
 
-      const { decision } = await cycle.run()
+      const cycleResult = await cycle.run()
 
       engine.pushPnlPoint(currentTime)
 
       try {
-        await this.config.onStep?.(step, total, currentTime, decision)
+        await this.config.onStep?.(step, total, currentTime, cycleResult)
       } catch (err) {
         console.warn('[BacktestRunner] onStep callback threw:', err)
       }
@@ -339,7 +353,7 @@ export class BacktestRunner {
       step++
     }
 
-    engine.forceCloseAll(new Date(this._cancelled ? current : end))
+    engine.forceCloseAll(new Date(this.#cancelled ? current : end))
 
     const stats = calculateStats(engine.trades, initialCapital, engine.pnlCurve, intervalMs)
     return { trades: engine.trades, stats, pnlCurve: engine.pnlCurve }

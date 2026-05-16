@@ -41,7 +41,8 @@ export class ClaudeAdapter implements LLMAdapter {
     const response = await this.client.messages.create({
       model: this.model,
       max_tokens: 1024,
-      system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } } as any],
+      // cache_control is supported at runtime but not in this SDK's TextBlockParam type
+      system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }] as any,
       messages: [{ role: 'user', content: user }],
       tools: [TOOL_DEFINITION],
       tool_choice: { type: 'any' },

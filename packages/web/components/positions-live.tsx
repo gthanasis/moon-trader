@@ -11,9 +11,10 @@ interface PositionsLiveProps {
 
 export function PositionsLive({ initialPositions }: PositionsLiveProps) {
   const [positions, setPositions] = useState<Trade[]>(initialPositions)
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date())
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   useEffect(() => {
+    setLastUpdated(new Date())
     const poll = async () => {
       try {
         const res = await fetch('/api/positions')
@@ -34,7 +35,7 @@ export function PositionsLive({ initialPositions }: PositionsLiveProps) {
   return (
     <div>
       <p className="text-xs text-muted-foreground mb-3">
-        Last updated: {lastUpdated.toLocaleTimeString()} (refreshes every 30s)
+        {lastUpdated ? `Last updated: ${lastUpdated.toLocaleTimeString()} (refreshes every 30s)` : ''}
       </p>
       <PositionsTable positions={positions} />
     </div>
