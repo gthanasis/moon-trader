@@ -1,87 +1,65 @@
 'use client'
 
-import { StatCard } from '@/components/stat-card'
-import { SignalFeed } from '@/components/signal-feed'
-import { DecisionLog } from '@/components/decision-log'
-import { PositionsTable } from '@/components/positions-table'
+import { PnlHero } from '@/components/dashboard/pnl-hero'
+import { NarrationPanel } from '@/components/dashboard/narration-panel'
+import { LiveActivityFeed } from '@/components/dashboard/live-activity-feed'
+import { SignalsSummary } from '@/components/dashboard/signals-summary'
 import { ApprovalBannerWrapper } from '@/components/approval-banner-wrapper'
-import { formatUsd } from '@/lib/format'
-import {
-  usePositions,
-  useTrades,
-  useDecisions,
-  usePendingDecision,
-  useSignals,
-  useBotState,
-} from '@/lib/queries'
+import { usePendingDecision } from '@/lib/queries'
+import { useAppEvents } from '@/lib/use-app-events'
 
+/**
+ * Single-screen real-time dashboard:
+ *   P&L hero  ·  narration | live activity  ·  signals summary
+ */
 export default function OverviewPage() {
-  const { data: recentTrades = [] } = useTrades(100)
-  const { data: openTrades = [] } = usePositions()
-  const { data: fearAndGreed = null } = useBotState<number | null>('fearAndGreed')
-  const { data: signals = [] } = useSignals()
+  // Opens the one SSE connection that feeds live updates into the cache.
+  useAppEvents()
   const { data: pendingDecision = null } = usePendingDecision()
-  const { data: recentDecisions = [] } = useDecisions(10)
-
-  const totalPnl = recentTrades.reduce((sum, t) => sum + (t.pnl ?? 0), 0)
-  const capitalDeployed = openTrades.reduce((sum, t) => sum + t.size, 0)
-  const pnlVariant = totalPnl > 0 ? 'pos' : totalPnl < 0 ? 'neg' : 'neutral'
-  const fgScore = fearAndGreed ?? null
-  const fgVariant = fgScore == null ? 'neutral' : fgScore < 30 ? 'neg' : fgScore < 60 ? 'warn' : 'pos'
 
   return (
-    <div>
-      {/* 4-col stat grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
-        <StatCard
-          label="Total P&L"
-          value={formatUsd(totalPnl)}
-          sub={totalPnl >= 0 ? '+since inception' : 'since inception'}
-          colorVariant={pnlVariant}
-        />
-        <StatCard
-          label="Capital Deployed"
-          labelSimple="Money in the Market"
-          value={formatUsd(capitalDeployed)}
-          sub="sum of open Trade.size"
-          subSimple="currently tied up in trades"
-        />
-        <StatCard
-          label="Open Positions"
-          value={String(openTrades.length)}
-          sub="active trades"
-        />
-        <StatCard
-          label="Fear & Greed"
-          labelSimple="Market Mood Score"
-          value={fgScore != null ? String(fgScore) : '—'}
-          sub={fgScore != null ? `${fgScore < 30 ? 'Fear' : fgScore < 60 ? 'Neutral' : 'Greed'} · index` : '—'}
-          subSimple={fgScore != null ? `${fgScore < 30 ? 'Fearful' : fgScore < 60 ? 'Neutral (50 = calm)' : 'Greedy'} · improving` : '—'}
-          colorVariant={fgVariant}
-        />
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', height: '100%', minHeight: 0 }}>
+      <PnlHero />
 
-      {/* approval banner — only shown when a pending decision exists */}
       {pendingDecision && <ApprovalBannerWrapper decision={pendingDecision} />}
 
-      {/* 3-col layout: positions | decisions | signals */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.6fr 1fr', gap: '16px' }}>
-        <div>
-          <div style={{ fontWeight: 600, fontSize: '12px', marginBottom: '10px' }}>Open Positions</div>
-          <PositionsTable positions={openTrades} />
-        </div>
-        <div>
-          <div style={{ fontWeight: 600, fontSize: '12px', marginBottom: '10px' }}>
-            <span className="xp">AI Decision Log</span>
-            <span className="nb">What the AI is thinking</span>
-          </div>
-          <DecisionLog decisions={recentDecisions} />
-        </div>
-        <div>
-          <div style={{ fontWeight: 600, fontSize: '12px', marginBottom: '10px' }}>Recent Signals</div>
-          <SignalFeed signals={signals.slice(0, 20)} />
-        </div>
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'grid',
+          gridTemplateColumns: '1.25fr 1fr',
+          gap: '14px',
+        }}
+      >
+        <Panel>
+          <NarrationPanel />
+        </Panel>
+        <Panel>
+          <LiveActivityFeed />
+        </Panel>
       </div>
+
+      <SignalsSummary />
+    </div>
+  )
+}
+
+/** A bordered region whose content scrolls internally so the page never does. */
+function Panel({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        minHeight: 0,
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--r)',
+        background: 'var(--bg)',
+        padding: '14px',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      {children}
     </div>
   )
 }
