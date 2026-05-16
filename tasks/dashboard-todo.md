@@ -18,6 +18,6 @@ Plan: `tasks/dashboard-plan.md` · Spec: `docs/superpowers/specs/2026-05-16-home
 
 ## Phase 3 — Web dashboard
 - [x] Task 9: web data layer (api-client, useNarrations, useAppEvents)
-- [ ] Task 10: dashboard components (PnlHero, NarrationPanel, LiveActivityFeed, SignalsSummary)
+- [x] Task 10: dashboard components (PnlHero, NarrationPanel, LiveActivityFeed, SignalsSummary)
 - [ ] Task 11: assemble single-screen page.tsx
 - [ ] **Checkpoint C** — complete, human review
