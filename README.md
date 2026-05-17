@@ -14,11 +14,17 @@ optional Telegram bot.
 
 ![Moon Trader dashboard](docs/screenshots/dashboard.png)
 
-> ## ⚠️ Disclaimer — Use at Your Own Risk
+## Why?
+
+The honest answer: just for fun. This is a project in a domain where I have no
+prior business knowledge at all, built to see how it goes. Treat it as an
+experiment, not a get-rich scheme.
+
+> ## ⚠️ Disclaimer: Use at Your Own Risk
 >
 > This software is provided for **educational and research purposes only**. It
 > is **not financial advice**. Cryptocurrency trading carries substantial risk
-> of loss — you can lose some or all of your capital. The authors and
+> of loss; you can lose some or all of your capital. The authors and
 > contributors make **no warranty** as to the correctness, reliability, or
 > profitability of this software and accept **no liability** for any financial
 > losses, missed trades, exchange errors, or damages of any kind arising from
@@ -29,20 +35,37 @@ optional Telegram bot.
 
 ## Features
 
-- **LLM trade evaluation** — decisions from OpenAI or Anthropic models, with
+- **LLM trade evaluation**: decisions from OpenAI or Anthropic models, with
   confidence calibration, an adversarial critic, and a lessons ledger.
-- **Risk management** — per-trade risk sizing, a daily loss limit, a max-open-
-  positions cap, a minimum-confidence gate, and an auto-trade size threshold
-  above which a trade needs human approval.
-- **Exits** — trailing stops, tiered take-profit, and partial take-profit.
-- **Backtesting** — replay historical candles with fill simulation, slippage,
+- **Customizable decision loop**: feed in your own external data sources and
+  shape the agent's style and prompt to steer it wherever you want.
+- **Risk management**: per-trade risk sizing, a daily loss limit, a
+  max-open-positions cap, a minimum-confidence gate, and an auto-trade size
+  threshold above which a trade needs human approval.
+- **Exits**: trailing stops, tiered take-profit, and partial take-profit.
+- **Backtesting**: replay historical candles with fill simulation, slippage,
   and fees; runs are persisted and streamed to the dashboard.
-- **Web dashboard** — Next.js UI for positions, trades, signals, decisions,
+- **Web dashboard**: Next.js UI for positions, trades, signals, decisions,
   narration, and settings.
-- **Telegram bot** — optional `/pause` `/resume` `/status` `/capital` commands
+- **Telegram bot**: optional `/pause` `/resume` `/status` `/capital` commands
   and inline approve/reject prompts for trades that exceed the auto threshold.
-- **Paper trading** — `PAPER=true` simulates fills so you can run the whole
+- **Paper trading**: `PAPER=true` simulates fills so you can run the whole
   system without touching a real exchange.
+
+## The decision loop
+
+At the heart of moon-trader is a decision loop you can shape to your liking. On
+every cycle it gathers inputs, hands them to the LLM, runs the verdict through
+the risk controls, and then executes or asks for approval. Two parts are fully
+in your hands:
+
+- **External sources.** Plug in extra market, sentiment, or on-chain data feeds
+  and they become part of the context the model reasons over. The more (and
+  better) the signals, the more informed each decision.
+- **Agent style and prompt.** Tune the system prompt and persona to steer the
+  bot wherever you want: cautious scalper, patient swing trader, or reckless
+  moonshot chaser. This also makes it delightfully easy to lose money, so steer
+  responsibly.
 
 ## Architecture
 
@@ -55,14 +78,14 @@ A pnpm + Turborepo monorepo:
 
 Inside `packages/api/src`:
 
-- `core/` — pure, dependency-free trading logic (capital guard, position
+- `core/`: pure, dependency-free trading logic (capital guard, position
   tracker, order manager, trading engine).
-- `trading/` — the live NestJS wiring around `core/` (scheduler, data loader,
+- `trading/`: the live NestJS wiring around `core/` (scheduler, data loader,
   cycle runner).
-- `llm/` — provider clients and the evaluation cycle.
-- `backtest/` — historical replay and fill simulation.
-- `http/` — REST controllers consumed by the dashboard.
-- `telegram/` — bot lifecycle, commands, trade-approval prompts.
+- `llm/`: provider clients and the evaluation cycle.
+- `backtest/`: historical replay and fill simulation.
+- `http/`: REST controllers consumed by the dashboard.
+- `telegram/`: bot lifecycle, commands, trade-approval prompts.
 
 State is persisted to PostgreSQL via Prisma.
 
@@ -76,7 +99,7 @@ State is persisted to PostgreSQL via Prisma.
 
 ```bash
 pnpm install
-cp .env.example .env   # then fill in your keys — see Configuration below
+cp .env.example .env   # then fill in your keys (see Configuration below)
 ```
 
 `pnpm dev` runs `docker compose up -d --wait` first (via the `predev` script),
@@ -95,8 +118,8 @@ pnpm dev
 
 This starts the API and the web dashboard via Turborepo. By default:
 
-- API — `http://127.0.0.1:4000` (loopback only)
-- Web — `http://localhost:3000`
+- API: `http://127.0.0.1:4000` (loopback only)
+- Web: `http://localhost:3000`
 
 ## Configuration
 
@@ -112,7 +135,7 @@ Key variables:
 | `DATABASE_URL`       | PostgreSQL connection string. |
 | `TOTAL_CAPITAL`      | Capital the bot manages. |
 | `AUTO_TRADE_LIMIT`   | Trades at or below this size execute automatically; larger ones need approval. |
-| `API_AUTH_TOKEN`     | Optional. Required bearer token for state-changing API routes — see Security. |
+| `API_AUTH_TOKEN`     | Optional. Required bearer token for state-changing API routes (see Security). |
 | `WEB_ORIGIN`         | Allowed CORS origin for the API (default `http://localhost:3000`). |
 
 ## Paper vs. live trading
@@ -133,7 +156,7 @@ pnpm typecheck   # type-check all packages
 
 ## Security
 
-The API binds to `127.0.0.1` only and has no authentication by default — this
+The API binds to `127.0.0.1` only and has no authentication by default; this
 is safe for a local single-machine setup. **Do not expose it beyond loopback
 without setting `API_AUTH_TOKEN`.** See [SECURITY.md](SECURITY.md) for details
 and for how to report vulnerabilities.
