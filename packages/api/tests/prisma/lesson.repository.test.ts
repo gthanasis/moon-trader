@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { LessonRepository } from '../../src/prisma/repositories/lesson.repository'
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaService } from '../../src/prisma/prisma.service'
 
 function makeMockPrisma() {
   return {
@@ -10,7 +10,7 @@ function makeMockPrisma() {
       update: vi.fn(),
       findMany: vi.fn(),
     },
-  } as unknown as PrismaClient
+  } as unknown as PrismaService
 }
 
 function lessonRow(over: Partial<Record<string, unknown>> = {}) {
@@ -22,7 +22,7 @@ function lessonRow(over: Partial<Record<string, unknown>> = {}) {
 }
 
 describe('LessonRepository', () => {
-  let prisma: PrismaClient
+  let prisma: PrismaService
   let repo: LessonRepository
 
   beforeEach(() => {

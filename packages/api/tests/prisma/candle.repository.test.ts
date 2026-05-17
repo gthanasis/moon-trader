@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { Candle } from '../../src/common'
 import { CandleRepository } from '../../src/prisma/repositories/candle.repository'
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaService } from '../../src/prisma/prisma.service'
 
 function makeMockPrisma() {
   return {
     candle: { createMany: vi.fn(), findMany: vi.fn() },
-  } as unknown as PrismaClient
+  } as unknown as PrismaService
 }
 
 const domainCandle: Candle = {
@@ -15,7 +15,7 @@ const domainCandle: Candle = {
 }
 
 describe('CandleRepository', () => {
-  let prisma: PrismaClient
+  let prisma: PrismaService
   let repo: CandleRepository
 
   beforeEach(() => { prisma = makeMockPrisma(); repo = new CandleRepository(prisma) })

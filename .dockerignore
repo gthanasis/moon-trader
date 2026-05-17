@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+.git
+.turbo
+**/.next
+**/dist
+.claude
+.playwright-mcp
+*.png
+design
+docs
+tasks
+.env
+.env.local

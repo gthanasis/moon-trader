@@ -1,6 +1,19 @@
 {
-  "name": "trader",
+  "name": "moon-trader",
+  "version": "0.1.0",
   "private": true,
+  "description": "An LLM-driven crypto trading bot with backtesting, a web dashboard, and a Telegram bot.",
+  "license": "MIT",
+  "author": "Thanasis Gliatis",
+  "keywords": [
+    "crypto",
+    "trading-bot",
+    "llm",
+    "backtesting",
+    "binance",
+    "nestjs",
+    "nextjs"
+  ],
   "packageManager": "pnpm@10.33.2",
   "scripts": {
     "predev": "docker compose up -d --wait",
@@ -12,9 +25,9 @@
     "review-run": "node scripts/review-run.mjs"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "turbo": "^2.0.0",
-    "typescript": "^5.4.0",
-    "vitest": "^1.6.0"
+    "@types/node": "^20.19.41",
+    "turbo": "^2.9.14",
+    "typescript": "^5.9.3",
+    "vitest": "^1.6.1"
   }
 }

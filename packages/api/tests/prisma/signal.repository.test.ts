@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { Signal } from '../../src/common'
 import { SignalRepository } from '../../src/prisma/repositories/signal.repository'
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaService } from '../../src/prisma/prisma.service'
 
 function makeMockPrisma() {
   return {
     signal: { createMany: vi.fn(), findMany: vi.fn() },
-  } as unknown as PrismaClient
+  } as unknown as PrismaService
 }
 
 const domainSignal: Signal = {
@@ -16,7 +16,7 @@ const domainSignal: Signal = {
 }
 
 describe('SignalRepository', () => {
-  let prisma: PrismaClient
+  let prisma: PrismaService
   let repo: SignalRepository
 
   beforeEach(() => { prisma = makeMockPrisma(); repo = new SignalRepository(prisma) })

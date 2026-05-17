@@ -36,16 +36,31 @@ function toExecutedOrder(order: CcxtOrderResult): ExecutedOrder {
   }
 }
 
+/** Extracts a readable message from an unknown thrown value. */
+function describe(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
+
 export class CcxtExchangeAdapter implements ExchangeAdapter {
   constructor(private readonly exchange: CcxtExchangeLike) {}
 
   async marketBuy(coin: string, costInQuote: number): Promise<ExecutedOrder> {
-    const order = await this.exchange.createMarketBuyOrderWithCost(coin, costInQuote)
-    return toExecutedOrder(order)
+    try {
+      const order = await this.exchange.createMarketBuyOrderWithCost(coin, costInQuote)
+      return toExecutedOrder(order)
+    } catch (err) {
+      throw new Error(`Exchange marketBuy failed for ${coin} (cost ${costInQuote}): ${describe(err)}`)
+    }
   }
 
   async marketSell(coin: string, baseAmount: number): Promise<ExecutedOrder> {
-    const order = await this.exchange.createMarketSellOrder(coin, baseAmount)
-    return toExecutedOrder(order)
+    try {
+      const order = await this.exchange.createMarketSellOrder(coin, baseAmount)
+      return toExecutedOrder(order)
+    } catch (err) {
+      // A failed sell means a protective exit did not execute — propagate with
+      // context so the trading loop logs an actionable error.
+      throw new Error(`Exchange marketSell failed for ${coin} (amount ${baseAmount}): ${describe(err)}`)
+    }
   }
 }

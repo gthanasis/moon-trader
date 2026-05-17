@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { Trade } from '../../src/common'
 import { TradeRepository } from '../../src/prisma/repositories/trade.repository'
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaService } from '../../src/prisma/prisma.service'
 
 function makeMockPrisma() {
   return {
@@ -9,7 +9,7 @@ function makeMockPrisma() {
       create: vi.fn(),
       findMany: vi.fn(),
     },
-  } as unknown as PrismaClient
+  } as unknown as PrismaService
 }
 
 const domainTrade: Trade = {
@@ -22,7 +22,7 @@ const domainTrade: Trade = {
 }
 
 describe('TradeRepository', () => {
-  let prisma: PrismaClient
+  let prisma: PrismaService
   let repo: TradeRepository
 
   beforeEach(() => {

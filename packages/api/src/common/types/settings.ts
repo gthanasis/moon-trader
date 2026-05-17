@@ -6,6 +6,33 @@
  * Restart-only config (API keys, coins, timeframe) stays in .env and is
  * intentionally NOT part of this type.
  */
+/** LLM providers the bot can call. The API key for each lives in .env. */
+export const LLM_PROVIDERS = [
+  { value: 'openai', label: 'OpenAI (GPT)' },
+  { value: 'anthropic', label: 'Anthropic (Claude)' },
+] as const
+
+export type LlmProvider = (typeof LLM_PROVIDERS)[number]['value']
+
+/**
+ * Selectable models per provider, used by the settings UI and by
+ * normalizeBotSettings to validate a saved choice. The first entry of each
+ * list is the provider's default.
+ */
+export const LLM_MODELS: Record<LlmProvider, { value: string; label: string }[]> = {
+  openai: [
+    { value: 'gpt-4o', label: 'GPT-4o' },
+    { value: 'gpt-4o-mini', label: 'GPT-4o mini' },
+    { value: 'gpt-4.1', label: 'GPT-4.1' },
+    { value: 'gpt-4.1-mini', label: 'GPT-4.1 mini' },
+  ],
+  anthropic: [
+    { value: 'claude-opus-4-7', label: 'Claude Opus 4.7' },
+    { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+    { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
+  ],
+}
+
 export interface BotSettings {
   /**
    * Editable strategy/persona text prepended to the system prompt. The locked
@@ -41,10 +68,17 @@ export interface BotSettings {
    * flips the order manager in place, so no restart is needed.
    */
   paperMode: boolean
+  /** LLM provider the evaluation cycle calls each cycle. Default: 'openai'. */
+  llmProvider: LlmProvider
+  /** Model id within the chosen provider. Default: 'gpt-4o'. */
+  llmModel: string
 }
 
-/** Numeric settings keys — everything in BotSettings except the booleans and prompt strings. */
-export type NumericSettingKey = Exclude<keyof BotSettings, 'paperMode' | 'breakEvenAfterTier' | 'strategyPrompt' | 'promptTemplate'>
+/** Numeric settings keys — everything in BotSettings except the booleans, the prompt strings and the LLM provider/model. */
+export type NumericSettingKey = Exclude<
+  keyof BotSettings,
+  'paperMode' | 'breakEvenAfterTier' | 'strategyPrompt' | 'promptTemplate' | 'llmProvider' | 'llmModel'
+>
 
 /** Prompt-string settings keys. */
 export type PromptSettingKey = 'strategyPrompt' | 'promptTemplate'
@@ -165,6 +199,8 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
   takeProfitTierPct: 0.5,
   breakEvenAfterTier: true,
   paperMode: true,
+  llmProvider: 'openai',
+  llmModel: 'gpt-4o',
 }
 
 /** Inclusive bounds enforced by both the web form and the server action. */
@@ -178,8 +214,12 @@ export const BOT_SETTINGS_BOUNDS: Record<NumericSettingKey, { min: number; max: 
   takeProfitTierPct: { min: 0.1, max: 1 },
 }
 
-/** Everything in BotSettings a strategy preset configures — all but `paperMode`. */
-export type PresetSettings = Omit<BotSettings, 'paperMode'>
+/**
+ * Everything in BotSettings a strategy preset configures. `paperMode` and the
+ * LLM provider/model are excluded — they are deliberate, separate choices, not
+ * part of a trading-style preset.
+ */
+export type PresetSettings = Omit<BotSettings, 'paperMode' | 'llmProvider' | 'llmModel'>
 
 /**
  * A named, ready-made strategy: a full prompt + parameter bundle the user can
@@ -325,6 +365,18 @@ export function normalizeBotSettings(raw: unknown): BotSettings {
     }
     if (typeof obj['paperMode'] === 'boolean') result.paperMode = obj['paperMode']
     if (typeof obj['breakEvenAfterTier'] === 'boolean') result.breakEvenAfterTier = obj['breakEvenAfterTier']
+    // LLM provider/model: a known provider resets the model to that provider's
+    // default, then a valid model id for it overrides. An unknown provider or
+    // model is dropped, leaving the defaults.
+    const provider = obj['llmProvider']
+    if (provider === 'openai' || provider === 'anthropic') {
+      result.llmProvider = provider
+      result.llmModel = LLM_MODELS[provider][0].value
+    }
+    const model = obj['llmModel']
+    if (typeof model === 'string' && LLM_MODELS[result.llmProvider].some(m => m.value === model)) {
+      result.llmModel = model
+    }
     for (const key of ['strategyPrompt', 'promptTemplate'] as PromptSettingKey[]) {
       const val = obj[key]
       // Reject non-strings, empties and oversized blobs — fall back to default.

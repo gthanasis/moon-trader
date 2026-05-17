@@ -11,6 +11,9 @@ import {
   PROMPT_MAX_LENGTH,
   CORE_SYSTEM_RULES,
   STRATEGY_PRESETS,
+  LLM_PROVIDERS,
+  LLM_MODELS,
+  type LlmProvider,
 } from '@api/common'
 import { usePaused, useSetPaused, useSaveSettings } from '@/lib/queries'
 import { Select } from '@/components/ui/select'
@@ -122,8 +125,9 @@ const GROUPS: { name: string; hint: string; keys: FieldDef['key'][] }[] = [
 
 const FIELD_BY_KEY = Object.fromEntries(FIELDS.map(f => [f.key, f])) as Record<FieldDef['key'], FieldDef>
 
-// The Bot group occupies the first two row numbers; numeric fields follow.
-const BOT_ROW_COUNT = 2
+// The Bot group occupies the first three row numbers (power, mode, model);
+// numeric fields follow.
+const BOT_ROW_COUNT = 3
 
 const fmt = (n: number) => String(Math.round(n * 1e4) / 1e4)
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
@@ -318,6 +322,8 @@ export function SettingsForm({ initial }: { initial: BotSettings }) {
     () =>
       FIELDS.some(f => values[f.key] !== saved[f.key]) ||
       values.paperMode !== saved.paperMode ||
+      values.llmProvider !== saved.llmProvider ||
+      values.llmModel !== saved.llmModel ||
       values.strategyPrompt !== saved.strategyPrompt ||
       values.promptTemplate !== saved.promptTemplate,
     [values, saved],
@@ -396,6 +402,7 @@ export function SettingsForm({ initial }: { initial: BotSettings }) {
   }
 
   const modeChanged = values.paperMode !== saved.paperMode
+  const modelChanged = values.llmProvider !== saved.llmProvider || values.llmModel !== saved.llmModel
 
   return (
     <div className="mx-auto max-w-[720px] overflow-hidden rounded border border-border bg-surface shadow-[0_24px_60px_-30px_rgba(0,0,0,0.8)]">
@@ -497,6 +504,60 @@ export function SettingsForm({ initial }: { initial: BotSettings }) {
               tone="warn"
               onClick={() => requestModeChange(!values.paperMode)}
             />
+          </section>
+
+          {/* 03 — LLM model */}
+          <section className="relative grid grid-cols-[34px_1fr_auto] gap-4 border-b border-border px-6 py-[15px] max-[560px]:grid-cols-1 max-[560px]:gap-2.5">
+            {modelChanged && <span className="absolute inset-y-0 left-0 w-0.5 bg-accent" />}
+            <div className="pt-0.5 font-mono text-sm tracking-[0.04em] text-muted max-[560px]:hidden">03</div>
+            <div>
+              <div className="flex items-baseline gap-[9px]">
+                <span className="text-[13px] font-[640] tracking-[-0.01em] text-fg">LLM model</span>
+                {modelChanged && (
+                  <span
+                    title="Unsaved change"
+                    className="h-[5px] w-[5px] self-center rounded-full bg-accent shadow-[0_0_8px_var(--accent)]"
+                  />
+                )}
+              </div>
+              <p className="mt-1.5 max-w-[52ch] text-[11.5px] leading-[1.5] text-muted">
+                Which model the bot calls each cycle to make decisions. The API key for the chosen
+                provider must be set in{' '}
+                <code className="rounded-sm border border-border bg-bg px-[5px] py-px font-mono text-[10.5px] text-fg">
+                  .env
+                </code>
+                . Larger models reason better but cost more per cycle.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 self-start max-[560px]:justify-self-start">
+              <Select
+                aria-label="LLM provider"
+                value={values.llmProvider}
+                options={[...LLM_PROVIDERS]}
+                onChange={v => {
+                  setStatus(null)
+                  const p = v as LlmProvider
+                  // Switching provider resets the model to that provider's default.
+                  setValues(prev => ({ ...prev, llmProvider: p, llmModel: LLM_MODELS[p][0].value }))
+                }}
+              />
+              <Select
+                aria-label="LLM model"
+                value={values.llmModel}
+                options={
+                  LLM_MODELS[values.llmProvider].some(m => m.value === values.llmModel)
+                    ? LLM_MODELS[values.llmProvider]
+                    : [
+                        { value: values.llmModel, label: `${values.llmModel} (custom)` },
+                        ...LLM_MODELS[values.llmProvider],
+                      ]
+                }
+                onChange={v => {
+                  setStatus(null)
+                  setValues(prev => ({ ...prev, llmModel: v }))
+                }}
+              />
+            </div>
           </section>
         </div>
 

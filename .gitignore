@@ -15,3 +15,6 @@ build/
 .trader.pid
 .claude/
 .playwright-mcp/
+
+# Local planning scratchpads — not part of the public project
+tasks/

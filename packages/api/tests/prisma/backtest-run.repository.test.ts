@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { BacktestRunRepository } from '../../src/prisma/repositories/backtest-run.repository'
 import type { BacktestRunConfig, StepDecision } from '../../src/prisma/repositories/backtest-run.repository'
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaService } from '../../src/prisma/prisma.service'
 import type { BacktestResult } from '../../src/common'
 
 function makeMockPrisma() {
@@ -12,7 +12,7 @@ function makeMockPrisma() {
       findMany: vi.fn(),
       findUnique: vi.fn(),
     },
-  } as unknown as PrismaClient
+  } as unknown as PrismaService
 }
 
 const config: BacktestRunConfig = {
@@ -34,8 +34,9 @@ const result: BacktestResult = {
     },
   ],
   stats: {
-    totalPnl: 200, winRate: 1, maxDrawdown: 0.02,
-    sharpeRatio: 1.5, avgHoldTimeMs: 432000000, totalTrades: 1,
+    initialCapital: 10000, totalPnl: 200, totalFees: 4, winRate: 1,
+    maxDrawdown: 0.02, sharpeRatio: 1.5, calmarRatio: 2, profitFactor: 3,
+    avgWin: 200, avgLoss: 0, avgHoldTimeMs: 432000000, totalTrades: 1,
   },
   pnlCurve: [
     { timestamp: new Date('2026-01-01'), capital: 10000 },
@@ -55,7 +56,7 @@ const decisions: StepDecision[] = [
 ]
 
 describe('BacktestRunRepository', () => {
-  let prisma: PrismaClient
+  let prisma: PrismaService
   let repo: BacktestRunRepository
 
   beforeEach(() => { prisma = makeMockPrisma(); repo = new BacktestRunRepository(prisma) })

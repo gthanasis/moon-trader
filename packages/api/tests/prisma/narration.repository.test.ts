@@ -14,7 +14,7 @@ const sampleInput: NarrationInput = {
   periodEnd: new Date('2026-05-16T06:00:00Z'),
   summary: 'Quiet block — bot held BTC through a small dip.',
   assessment: 'Sensible: no overtrading.',
-  stats: { pnl: 12.5, trades: 1, wins: 1, losses: 0, winRate: 1 },
+  stats: { pnl: 12.5, trades: 1, wins: 1, losses: 0, winRate: 1, benchmarkReturn: 0.8, alpha: 11.7 },
 }
 
 describe('NarrationRepository', () => {

@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { registerCommands } from '../../src/telegram/commands'
 import type { BotStateRepository } from '../../src/prisma/repositories/bot-state.repository'
 
+/** The configured chat id every command is gated to. */
+const CHAT_ID = '12345'
+
 /** In-memory BotStateRepository double — registerCommands now takes the repo. */
 function makeBotState() {
   return {
@@ -10,8 +13,10 @@ function makeBotState() {
   } as unknown as BotStateRepository
 }
 
+/** A ctx from the authorized chat unless `chat` is overridden. */
 function makeCtx(overrides: Record<string, unknown> = {}) {
   return {
+    chat: { id: Number(CHAT_ID) },
     reply: vi.fn().mockResolvedValue({}),
     ...overrides,
   }
@@ -43,7 +48,7 @@ describe('registerCommands', () => {
 
   it('/pause sets paused=true in botState and replies', async () => {
     const bot = makeBot()
-    registerCommands(bot as unknown as BotArg, botState)
+    registerCommands(bot as unknown as BotArg, botState, CHAT_ID)
     const ctx = makeCtx()
 
     await bot._trigger('pause', ctx)
@@ -56,7 +61,7 @@ describe('registerCommands', () => {
 
   it('/resume sets paused=false in botState and replies', async () => {
     const bot = makeBot()
-    registerCommands(bot as unknown as BotArg, botState)
+    registerCommands(bot as unknown as BotArg, botState, CHAT_ID)
     const ctx = makeCtx()
 
     await bot._trigger('resume', ctx)
@@ -69,7 +74,7 @@ describe('registerCommands', () => {
 
   it('/status reads positions and pnl from botState and replies', async () => {
     const bot = makeBot()
-    registerCommands(bot as unknown as BotArg, botState)
+    registerCommands(bot as unknown as BotArg, botState, CHAT_ID)
     const ctx = makeCtx()
     ;(botState.get as ReturnType<typeof vi.fn>).mockImplementation(async (key: string) => {
       if (key === 'positions') return [{ coin: 'BTC/USDT' }, { coin: 'ETH/USDT' }]
@@ -87,7 +92,7 @@ describe('registerCommands', () => {
 
   it('/status handles null DB values gracefully', async () => {
     const bot = makeBot()
-    registerCommands(bot as unknown as BotArg, botState)
+    registerCommands(bot as unknown as BotArg, botState, CHAT_ID)
     const ctx = makeCtx()
     ;(botState.get as ReturnType<typeof vi.fn>).mockResolvedValue(null)
 
@@ -100,7 +105,7 @@ describe('registerCommands', () => {
 
   it('/capital reads deployedCapital and totalCapital from botState and replies', async () => {
     const bot = makeBot()
-    registerCommands(bot as unknown as BotArg, botState)
+    registerCommands(bot as unknown as BotArg, botState, CHAT_ID)
     const ctx = makeCtx()
     ;(botState.get as ReturnType<typeof vi.fn>).mockImplementation(async (key: string) => {
       if (key === 'deployedCapital') return 750
@@ -114,5 +119,18 @@ describe('registerCommands', () => {
     const [msg] = (ctx.reply as ReturnType<typeof vi.fn>).mock.calls[0] as [string]
     expect(msg).toContain('750')
     expect(msg).toContain('1000')
+  })
+
+  it('ignores commands from a chat other than the configured one', async () => {
+    const bot = makeBot()
+    registerCommands(bot as unknown as BotArg, botState, CHAT_ID)
+    const intruder = makeCtx({ chat: { id: 99999 } })
+
+    await bot._trigger('resume', intruder)
+    await bot._trigger('status', intruder)
+    await bot._trigger('capital', intruder)
+
+    expect(botState.set).not.toHaveBeenCalled()
+    expect(intruder.reply).not.toHaveBeenCalled()
   })
 })

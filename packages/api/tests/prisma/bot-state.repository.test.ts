@@ -1,15 +1,15 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { BotStateRepository } from '../../src/prisma/repositories/bot-state.repository'
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaService } from '../../src/prisma/prisma.service'
 
 function makeMockPrisma() {
   return {
     botState: { findUnique: vi.fn(), upsert: vi.fn() },
-  } as unknown as PrismaClient
+  } as unknown as PrismaService
 }
 
 describe('BotStateRepository', () => {
-  let prisma: PrismaClient
+  let prisma: PrismaService
   let repo: BotStateRepository
 
   beforeEach(() => { prisma = makeMockPrisma(); repo = new BotStateRepository(prisma) })

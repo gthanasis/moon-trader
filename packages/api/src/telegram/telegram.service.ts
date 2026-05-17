@@ -35,7 +35,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     this.bot = new Bot(token)
     this._notifier = new BotNotifier(token, chatId)
     this._approvalManager = new ApprovalManager(token, chatId)
-    registerCommands(this.bot, this.botState)
+    registerCommands(this.bot, this.botState, chatId)
 
     // Long polling — non-blocking.
     void this.bot.start()

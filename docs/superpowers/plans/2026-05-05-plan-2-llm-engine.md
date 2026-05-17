@@ -96,7 +96,7 @@ export interface LLMAdapter {
 - [ ] **Step 4: Install dependencies**
 
 ```bash
-cd /Users/thanasisgliatis/git/trader && pnpm install
+cd ~/trader && pnpm install
 ```
 
 Expected: `@anthropic-ai/sdk` and `openai` appear in `packages/llm/node_modules` (or hoisted), no errors.
@@ -978,7 +978,7 @@ describe('LLM integration smoke test', () => {
 
 - [ ] **Step 4: Update root `vitest.config.ts` to resolve `@trader/llm`**
 
-The current `vitest.config.ts` at `/Users/thanasisgliatis/git/trader/vitest.config.ts` uses directory aliases. Add `@trader/llm` in the same style:
+The current `vitest.config.ts` at `~/trader/vitest.config.ts` uses directory aliases. Add `@trader/llm` in the same style:
 
 ```typescript
 import { defineConfig } from 'vitest/config'
@@ -1002,7 +1002,7 @@ export default defineConfig({
 - [ ] **Step 5: Build all packages and run integration smoke test**
 
 ```bash
-cd /Users/thanasisgliatis/git/trader && pnpm build && pnpm test tests/smoke-llm.test.ts
+cd ~/trader && pnpm build && pnpm test tests/smoke-llm.test.ts
 ```
 
 Expected: 3 tests PASS.

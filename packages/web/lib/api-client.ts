@@ -47,6 +47,13 @@ export interface StoredDecision extends LLMDecision {
 export const API_BASE_URL =
   process.env['NEXT_PUBLIC_API_URL'] ?? 'http://127.0.0.1:4000'
 
+/**
+ * Shared secret for the API's mutating routes. Only needed when the API is
+ * deployed beyond loopback and started with `API_AUTH_TOKEN` set — leave unset
+ * for the standard local setup. Sent as `Authorization: Bearer <token>`.
+ */
+const API_TOKEN = process.env['NEXT_PUBLIC_API_TOKEN']
+
 // --- API response shapes (mirror the controllers / repositories) ------------
 
 export interface StepDecision {
@@ -86,7 +93,11 @@ export interface BacktestRunDetail extends BacktestRunSummary {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(API_TOKEN ? { Authorization: `Bearer ${API_TOKEN}` } : {}),
+      ...init?.headers,
+    },
     // Always hit the API fresh — this data is live.
     cache: 'no-store',
   })

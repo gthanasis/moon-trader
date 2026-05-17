@@ -26,6 +26,14 @@ export class ApprovalManager {
     this.timeoutMs = config.timeoutMs ?? 10 * 60 * 1000 // 10 minutes default
 
     this.bot.on('callback_query:data', async ctx => {
+      // Only the configured chat may approve/reject trades. A callback from any
+      // other chat (e.g. the bot was added to a group, or a stranger found it)
+      // is acknowledged and dropped — never resolved into a trade decision.
+      if (String(ctx.callbackQuery.message?.chat?.id) !== this.chatId) {
+        await ctx.answerCallbackQuery()
+        return
+      }
+
       const messageId = String(ctx.callbackQuery.message?.message_id)
       const entry = this.pending.get(messageId)
 

@@ -94,6 +94,11 @@ export class EvaluationCycle {
     }
   }
 
+  /** Swaps the LLM adapter in place — used when the provider/model changes. */
+  setAdapter(adapter: LLMAdapter): void {
+    this.config.adapter = adapter
+  }
+
   /**
    * Runs one evaluation cycle. The adapter may return several decisions — one
    * per coin it has a view on — and each is gated, risk-sized, and executed

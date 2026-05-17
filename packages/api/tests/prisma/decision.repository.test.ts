@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import type { LLMDecision } from '../../src/common'
 import { DecisionRepository } from '../../src/prisma/repositories/decision.repository'
-import type { PrismaClient } from '@prisma/client'
+import type { PrismaService } from '../../src/prisma/prisma.service'
 
 function makeMockPrisma() {
   return {
     llmDecision: { create: vi.fn(), update: vi.fn() },
-  } as unknown as PrismaClient
+  } as unknown as PrismaService
 }
 
 const domainDecision: LLMDecision = {
@@ -15,7 +15,7 @@ const domainDecision: LLMDecision = {
 }
 
 describe('DecisionRepository', () => {
-  let prisma: PrismaClient
+  let prisma: PrismaService
   let repo: DecisionRepository
 
   beforeEach(() => { prisma = makeMockPrisma(); repo = new DecisionRepository(prisma) })

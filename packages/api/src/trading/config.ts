@@ -3,6 +3,10 @@ export interface LiveConfig {
   binanceSecret: string
   llmProvider: 'anthropic' | 'openai'
   llmApiKey: string
+  /** Per-provider API keys, present only when set in .env. The runtime adapter
+   * swap (web settings) needs the key for whichever provider the user picks. */
+  openaiApiKey?: string
+  anthropicApiKey?: string
   totalCapital: number
   autoTradeLimit: number
   coins: string[]
@@ -52,6 +56,8 @@ export function loadConfig(): LiveConfig {
     binanceSecret: required('BINANCE_SECRET'),
     llmProvider,
     llmApiKey,
+    openaiApiKey: process.env['OPENAI_API_KEY'],
+    anthropicApiKey: process.env['ANTHROPIC_API_KEY'],
     totalCapital: parseNumber('TOTAL_CAPITAL', 1000, 0),
     autoTradeLimit: parseNumber('AUTO_TRADE_LIMIT', 50, 0),
     coins: (process.env['COINS'] ?? 'BTC/USDT,ETH/USDT').split(','),

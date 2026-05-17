@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
+import { APP_GUARD } from '@nestjs/core'
 import { resolve } from 'path'
+import { ApiTokenGuard } from './common/api-token.guard'
 import { HealthController } from './health/health.controller'
 import { PrismaModule } from './prisma/prisma.module'
 import { EventsModule } from './events/events.module'
@@ -26,5 +28,6 @@ import { HttpModule } from './http/http.module'
     HttpModule,
   ],
   controllers: [HealthController],
+  providers: [{ provide: APP_GUARD, useClass: ApiTokenGuard }],
 })
 export class AppModule {}

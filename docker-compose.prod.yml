@@ -1,0 +1,53 @@
+# Production stack — Postgres + API + web. Every published port is bound to
+# 127.0.0.1, so nothing is reachable from the public internet. Access the
+# dashboard via an SSH tunnel (see DEPLOY.md).
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: trader
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - trader_pgdata:/var/lib/postgresql/data
+    # No `ports:` — Postgres is reachable only on the compose network.
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+    image: trader-app
+    restart: unless-stopped
+    # Apply pending migrations, then start the API.
+    command: sh -c "pnpm --filter @trader/api exec prisma migrate deploy && node packages/api/dist/main.js"
+    env_file: .env
+    environment:
+      API_HOST: 0.0.0.0          # reachable by sibling containers (host port stays loopback)
+      API_PORT: 4000
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/trader
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:4000:4000'    # private — tunnel to reach it
+
+  web:
+    image: trader-app            # reuses the image built by the `api` service
+    restart: unless-stopped
+    command: pnpm --filter @trader/web start
+    environment:
+      NODE_ENV: production
+    depends_on:
+      - api
+    ports:
+      - '127.0.0.1:3000:3000'    # private — tunnel to reach it
+
+volumes:
+  trader_pgdata:

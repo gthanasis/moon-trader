@@ -234,6 +234,14 @@ export class TradingEngine {
         this.guard.releaseWithProceeds(position.size, netProceeds)
         this.closePositionBookkeeping(decision.coin)
         await this.onPositionClosed?.({ coin: decision.coin, fillPrice: order.fillPrice, pnl: totalPnl, reason: 'sell', partial: false })
+      } else {
+        // The exit order did not fill. The position is still open on the
+        // exchange and still tracked here — surface it loudly rather than
+        // silently reporting success.
+        this.logger.error(
+          `Sell order for ${decision.coin} did not fill (status: ${order.status}); position remains open`,
+        )
+        return { executed: false, reason: `Sell order for ${decision.coin} did not fill` }
       }
 
       return { executed: true, order }
@@ -351,6 +359,14 @@ export class TradingEngine {
         this.guard.releaseWithProceeds(current.size, netProceeds)
         this.closePositionBookkeeping(current.coin)
         await this.onPositionClosed?.({ coin: current.coin, fillPrice: order.fillPrice, pnl: totalPnl, reason, partial: false })
+      } else {
+        // A stop-loss / take-profit sell that does not fill must not be
+        // silently dropped — the protective exit failed for this cycle and the
+        // position stays exposed until the next check.
+        this.logger.error(
+          `Stop/take-profit sell for ${current.coin} did not fill (status: ${order.status}); ` +
+            `position remains exposed`,
+        )
       }
     }
   }

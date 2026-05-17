@@ -195,6 +195,19 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
     })
     this.engine = engine
 
+    // Builds an adapter for a provider/model picked at runtime in the web UI.
+    // The provider's API key must be set in .env, else the swap is rejected.
+    const buildAdapter = (provider: 'anthropic' | 'openai', model: string) => {
+      if (provider === 'openai') {
+        if (!config.openaiApiKey) throw new Error('OPENAI_API_KEY is not set')
+        return new OpenAIAdapter({ apiKey: config.openaiApiKey, model })
+      }
+      if (!config.anthropicApiKey) throw new Error('ANTHROPIC_API_KEY is not set')
+      return new ClaudeAdapter({ apiKey: config.anthropicApiKey, model })
+    }
+
+    // Seed the adapter from the .env provider; applyRuntimeSettings() swaps in
+    // the persisted provider/model before the first cycle runs.
     const llmAdapter =
       config.llmProvider === 'openai'
         ? new OpenAIAdapter({ apiKey: config.llmApiKey })
@@ -232,6 +245,16 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
             .map(k => `${k}: ${String(prev![k])} → ${String(settings[k])}`)
           if (changed.length > 0) {
             this.logger.log(`Runtime settings changed — ${changed.join(', ')}`)
+          }
+        }
+        // Swap the LLM adapter when the provider or model changed (also on the
+        // first apply, to honour the persisted choice over the .env seed).
+        if (!prev || prev.llmProvider !== settings.llmProvider || prev.llmModel !== settings.llmModel) {
+          try {
+            cycle.setAdapter(buildAdapter(settings.llmProvider, settings.llmModel))
+            this.logger.log(`LLM adapter → ${settings.llmProvider} / ${settings.llmModel}`)
+          } catch (err) {
+            this.logger.error(`Cannot switch LLM adapter — keeping current: ${String(err)}`)
           }
         }
         prev = settings

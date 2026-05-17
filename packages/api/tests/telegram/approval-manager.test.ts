@@ -65,7 +65,7 @@ describe('ApprovalManager', () => {
     await bot._callbackHandlers[0]?.({
       callbackQuery: {
         data: 'approve',
-        message: { message_id: messageId },
+        message: { message_id: messageId, chat: { id: 123456 } },
       },
       answerCallbackQuery: vi.fn(),
     })
@@ -84,7 +84,7 @@ describe('ApprovalManager', () => {
     await bot._callbackHandlers[0]?.({
       callbackQuery: {
         data: 'reject',
-        message: { message_id: messageId },
+        message: { message_id: messageId, chat: { id: 123456 } },
       },
       answerCallbackQuery: vi.fn(),
     })
@@ -124,6 +124,28 @@ describe('ApprovalManager', () => {
     expect(text).toContain('Strong on-chain inflow')
   })
 
+  it('ignores a callback from a chat other than the configured one', async () => {
+    const manager = new ApprovalManager('token', '123456', { timeoutMs: 5_000 })
+    const bot = getBotInstance()
+    const messageId = 47
+    bot.api.sendMessage.mockResolvedValue({ message_id: messageId })
+
+    const promise = manager.requestApproval(mockDecision)
+
+    // An intruder presses Approve from a different chat — must not resolve it.
+    await bot._callbackHandlers[0]?.({
+      callbackQuery: {
+        data: 'approve',
+        message: { message_id: messageId, chat: { id: 99999 } },
+      },
+      answerCallbackQuery: vi.fn(),
+    })
+
+    // The pending approval is untouched and still times out.
+    vi.advanceTimersByTime(5_000)
+    await expect(promise).resolves.toBe('timeout')
+  })
+
   it('removes pending entry from Map after resolution so a second callback is ignored', async () => {
     const manager = new ApprovalManager('token', '123456', { timeoutMs: 60_000 })
     const bot = getBotInstance()
@@ -132,7 +154,7 @@ describe('ApprovalManager', () => {
 
     const promise = manager.requestApproval(mockDecision)
     const ctx = {
-      callbackQuery: { data: 'approve', message: { message_id: messageId } },
+      callbackQuery: { data: 'approve', message: { message_id: messageId, chat: { id: 123456 } } },
       answerCallbackQuery: vi.fn(),
     }
 

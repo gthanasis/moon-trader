@@ -330,7 +330,4 @@ Recommended default: store only `reasoning` (raw), translate in the UI. Only add
 | `trader-dashboard-prototype.html` | Initial exploration (3-theme Tweaks panel, no Expert/Simple) |
 | `design-spec.md` | This document |
 
-All files live at:
-```
-/Users/thanasisgliatis/git/open-design/.od/projects/0e308369-cfa6-4d35-9cab-304161b5acac/
-```
+All files live in the `design/` directory of this repository.
