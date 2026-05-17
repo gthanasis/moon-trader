@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
 import { SettingsModule } from '../settings/settings.module'
 import { TelegramModule } from '../telegram/telegram.module'
+import { CalibrationService } from '../llm'
 import { TradingService } from './trading.service'
 
 /**
@@ -9,7 +10,7 @@ import { TradingService } from './trading.service'
  */
 @Module({
   imports: [SettingsModule, TelegramModule],
-  providers: [TradingService],
+  providers: [TradingService, CalibrationService],
   exports: [TradingService],
 })
 export class TradingModule {}

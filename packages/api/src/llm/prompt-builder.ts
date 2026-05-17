@@ -103,6 +103,19 @@ function renderRegime(ctx: TradingContext): string {
     .join('\n')
 }
 
+/** The bot's confidence-calibration curve — predicted vs realised win rate. */
+function renderCalibration(ctx: TradingContext): string {
+  const bands = (ctx.calibration ?? []).filter(b => !b.insufficient)
+  if (bands.length === 0) return 'Not enough closed trades to calibrate confidence yet'
+  return bands
+    .map(b => {
+      const win = (b.realisedWinRate * 100).toFixed(0)
+      const avg = `${b.avgPnl >= 0 ? '+' : ''}$${b.avgPnl.toFixed(2)}`
+      return `- confidence ${b.range}: actually won ${win}% over ${b.n} trades (avg ${avg})`
+    })
+    .join('\n')
+}
+
 /** Active lessons the post-mortem critic has accumulated from past periods. */
 function renderLessons(ctx: TradingContext): string {
   const lessons = ctx.lessons ?? []
@@ -157,6 +170,7 @@ const PLACEHOLDERS: Record<PromptPlaceholderName, (ctx: TradingContext) => strin
   signals: renderSignals,
   microstructure: renderMicrostructure,
   lessons: renderLessons,
+  calibration: renderCalibration,
   trades: renderTrades,
   openOrders: renderOpenOrders,
   narration6h: renderNarration('6h', 'last-6h'),

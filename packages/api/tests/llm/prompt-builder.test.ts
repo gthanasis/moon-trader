@@ -118,6 +118,26 @@ describe('buildPrompt', () => {
     expect(user).toContain('No lessons recorded yet')
   })
 
+  it('renders the confidence-calibration curve, hiding insufficient bands', () => {
+    const context: TradingContext = {
+      ...emptyContext,
+      calibration: [
+        { range: '0.8–0.9', predictedConfidence: 0.85, n: 5, realisedWinRate: 0.2, avgPnl: -1.5, insufficient: false },
+        { range: '0.9–1.0', predictedConfidence: 0.95, n: 1, realisedWinRate: 1, avgPnl: 3, insufficient: true },
+      ],
+    }
+    const { user } = buildPrompt(context)
+    expect(user).toContain('Confidence Calibration')
+    expect(user).toContain('confidence 0.8–0.9')
+    expect(user).toContain('actually won 20%')
+    expect(user).not.toContain('0.9–1.0') // insufficient band is hidden
+  })
+
+  it('shows a not-calibrated line when no band has enough data', () => {
+    const { user } = buildPrompt(emptyContext)
+    expect(user).toContain('Not enough closed trades to calibrate')
+  })
+
   it('system prompt instructs use of make_trading_decision tool', () => {
     const { system } = buildPrompt(emptyContext)
     expect(system).toContain('make_trading_decision')

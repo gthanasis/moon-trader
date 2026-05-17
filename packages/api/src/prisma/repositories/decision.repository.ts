@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-import type { LLMDecision, FeatureSet, Regime } from '../../common'
+import type { LLMDecision, FeatureSet, Regime, ConfidenceOutcome } from '../../common'
 import { PrismaService } from '../prisma.service'
 
 export type DecisionStatus = 'executed' | 'blocked' | 'pending' | 'approved' | 'rejected'
@@ -105,6 +105,24 @@ export class DecisionRepository {
       orderBy: { decidedAt: 'asc' },
     })
     return rows.map(toStoredDecision)
+  }
+
+  /**
+   * Predicted-confidence/realised-PnL pairs from every decision whose linked
+   * trade has closed — the raw input for the confidence-calibration curve.
+   */
+  async findConfidenceOutcomes(): Promise<ConfidenceOutcome[]> {
+    const rows = await this.prisma.llmDecision.findMany({
+      where: { tradeId: { not: null } },
+      include: { trade: true },
+    })
+    const out: ConfidenceOutcome[] = []
+    for (const row of rows) {
+      if (row.trade?.closedAt != null && row.trade.pnl != null) {
+        out.push({ confidence: row.confidence, pnl: row.trade.pnl })
+      }
+    }
+    return out
   }
 
   async updateDecisionStatus(id: string, status: 'approved' | 'rejected'): Promise<void> {

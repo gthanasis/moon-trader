@@ -1,7 +1,7 @@
 import { Injectable, Logger, type OnModuleInit, type OnModuleDestroy } from '@nestjs/common'
 import type { Subscription } from 'rxjs'
 import ccxt from 'ccxt'
-import { ClaudeAdapter, OpenAIAdapter, EvaluationCycle } from '../llm'
+import { ClaudeAdapter, OpenAIAdapter, EvaluationCycle, CalibrationService } from '../llm'
 import { TradingEngine, CcxtExchangeAdapter } from '../core'
 import { Pipeline, BinanceSource, FearAndGreedSource, RssNewsSource, BinanceFuturesSource, LiquidationCollector, LiquidationSource } from '../market-data'
 import { intervalToCron, type BotSettings } from '../common'
@@ -48,6 +48,7 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
     private readonly settings: SettingsService,
     private readonly telegram: TelegramService,
     private readonly events: EventsService,
+    private readonly calibration: CalibrationService,
   ) {}
 
   /**
@@ -212,6 +213,7 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
       getRecentTrades: () => this.tradeRepo.findRecentTrades(5),
       getNarrations: () => this.loadNarrations(),
       getLessons: () => this.lessonRepo.activeLessons().catch(() => []),
+      getCalibration: () => this.calibration.compute().catch(() => []),
       notifier,
       onApprovalNeeded: approvalManager
         ? async decision => (await approvalManager.requestApproval(decision)) === 'approved'

@@ -2,6 +2,7 @@ import type { WorldSnapshot } from './signal'
 import type { Position, Trade, Order } from './trade'
 import type { NarrationGranularity } from './narration'
 import type { Lesson } from './lesson'
+import type { CalibrationBucket } from './calibration'
 
 export interface LLMDecision {
   action: 'buy' | 'sell' | 'hold'
@@ -35,4 +36,9 @@ export interface TradingContext {
    * via the `{lessons}` placeholder.
    */
   lessons?: Lesson[]
+  /**
+   * The bot's confidence-calibration curve — predicted vs realised win rate —
+   * surfaced via the `{calibration}` placeholder.
+   */
+  calibration?: CalibrationBucket[]
 }

@@ -65,6 +65,7 @@ export const PROMPT_PLACEHOLDERS = [
   { name: 'signals', description: 'Recent news / sentiment / macro signals' },
   { name: 'microstructure', description: 'Futures funding, open interest, order-book imbalance, liquidations' },
   { name: 'lessons', description: 'Active lessons the post-mortem critic learned from past periods' },
+  { name: 'calibration', description: 'Predicted vs realised win rate per confidence band' },
   { name: 'trades', description: 'Most recent trades with P&L' },
   { name: 'openOrders', description: 'Currently open (unfilled) orders' },
   { name: 'narration6h', description: "Bot's own recap of the last 6 hours" },
@@ -133,6 +134,9 @@ Available capital: {capital}
 
 ## Lessons Learned (from the post-mortem critic — apply these)
 {lessons}
+
+## Confidence Calibration (how your past confidence compared to reality)
+{calibration}
 
 ## Recent Trades
 {trades}

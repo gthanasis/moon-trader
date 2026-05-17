@@ -49,6 +49,10 @@ numbering (1 critic+lessons, 2 alpha, 4 exits, 5 features+microstructure,
 - [x] **Checkpoint:** 361 tests + api/web builds green — awaiting human review
 
 ## Phase 6 — LLM Confidence Calibration (Item 7)
-- [ ] Task 13: Calibration computation service
-- [ ] Task 14: Surface `{calibration}` in prompt + read endpoint
-- [ ] **Checkpoint:** full suite + e2e pass; one cycle exercises all five new inputs — ready for review
+- [x] Task 13: `CalibrationService` + pure `bucketOutcomes` —
+      `DecisionRepository.findConfidenceOutcomes` joins closed trades to
+      decisions, buckets by predicted confidence vs realised win rate
+- [x] Task 14: `{calibration}` placeholder (hides sparse bands) + default
+      template; `GET /calibration` endpoint
+- [x] **Checkpoint:** 369 unit tests + api/web builds green. e2e not run
+      (needs a live server + DB) — ready for review
