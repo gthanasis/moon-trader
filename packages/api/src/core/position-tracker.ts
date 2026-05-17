@@ -46,6 +46,25 @@ export class PositionTracker {
   }
 
   /**
+   * Shrinks a position by `fraction` of its size (0 < fraction < 1), keeping
+   * the average entry price. Used to bank a partial take-profit. No-op when
+   * the position is missing or the fraction is out of range.
+   */
+  reduce(coin: string, fraction: number): void {
+    const position = this.positions.get(coin)
+    if (!position || fraction <= 0 || fraction >= 1) return
+    this.positions.set(coin, { ...position, size: position.size * (1 - fraction) })
+  }
+
+  /** Clears a position's take-profit so it no longer triggers an exit. */
+  clearTakeProfit(coin: string): void {
+    const position = this.positions.get(coin)
+    if (position) {
+      this.positions.set(coin, { ...position, takeProfit: undefined })
+    }
+  }
+
+  /**
    * Adds to an existing position, recomputing total size and the
    * volume-weighted average entry price. No-op when the position does not
    * exist or the inputs are non-positive.

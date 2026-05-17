@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { TradingEngine } from '../../src/core/trading-engine'
+import { TradingEngine, type PositionClosedEvent } from '../../src/core/trading-engine'
 import type { LLMDecision } from '../../src/common'
 import type { ExchangeAdapter, ExecutedOrder } from '../../src/core/exchange-adapter'
 
@@ -181,15 +181,52 @@ describe('TradingEngine.checkStopLosses', () => {
     engine = new TradingEngine({ totalCapital: 1000, paper: true })
   })
 
-  it('closes a position when current price hits the take-profit level', async () => {
+  it('takes a partial profit on the first take-profit touch, leaving the rest open', async () => {
     engine.updatePositionPrice('BTC/USDT', 50000)
     await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy', takeProfit: 55000 })
 
     engine.updatePositionPrice('BTC/USDT', 55000) // price reached take-profit
     await engine.checkStopLosses()
 
+    const positions = engine.getPositions()
+    expect(positions).toHaveLength(1)
+    expect(positions[0].size).toBe(100) // half the position banked
+    expect(positions[0].takeProfit).toBeUndefined() // cleared — remainder rides the trailing stop
+  })
+
+  it('banks a take-profit tier then closes the remainder, reporting total PnL', async () => {
+    const closes: PositionClosedEvent[] = []
+    const engine = new TradingEngine({ totalCapital: 1000, paper: true, onPositionClosed: e => { closes.push(e) } })
+    engine.updatePositionPrice('BTC/USDT', 50000)
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy', stopLoss: 48000, takeProfit: 55000 })
+
+    // Price hits take-profit — bank half, move the stop to break-even.
+    engine.updatePositionPrice('BTC/USDT', 55000)
+    await engine.checkStopLosses()
+    expect(engine.getPositions()).toHaveLength(1)
+    expect(engine.getPositions()[0].size).toBe(100)
+    expect(engine.getPositions()[0].stopLoss).toBe(50000) // break-even
+    expect(closes).toHaveLength(1)
+    expect(closes[0].partial).toBe(true)
+    expect(closes[0].pnl).toBeCloseTo(10, 5) // 0.002 BTC × (55000 − 50000)
+
+    // Price falls back to break-even — the remainder closes via the stop.
+    engine.updatePositionPrice('BTC/USDT', 50000)
+    await engine.checkStopLosses()
     expect(engine.getPositions()).toHaveLength(0)
-    expect(engine.availableCapital()).toBeGreaterThan(1000) // gain
+    expect(closes).toHaveLength(2)
+    expect(closes[1].partial).toBe(false)
+    expect(closes[1].pnl).toBeCloseTo(10, 5) // tier (+10) + remainder (0)
+    expect(engine.availableCapital()).toBeCloseTo(1010, 5)
+  })
+
+  it('does a full take-profit exit when takeProfitTierPct is 1', async () => {
+    const engine = new TradingEngine({ totalCapital: 1000, paper: true, takeProfitTierPct: 1 })
+    engine.updatePositionPrice('BTC/USDT', 50000)
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'buy', takeProfit: 55000 })
+    engine.updatePositionPrice('BTC/USDT', 55000)
+    await engine.checkStopLosses()
+    expect(engine.getPositions()).toHaveLength(0)
   })
 
   it('does not close a position when price is below take-profit', async () => {

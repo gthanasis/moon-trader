@@ -28,9 +28,12 @@ numbering (1 critic+lessons, 2 alpha, 4 exits, 5 features+microstructure,
 - [x] **Checkpoint:** 343 tests + api/web builds green — awaiting human review
 
 ## Phase 3 — Win/Loss Math: Partial TP + Trailing (Item 4)
-- [ ] Task 7: Partial take-profit + tiered exits in the engine
-- [ ] Task 8: Expose exit parameters through settings
-- [ ] **Checkpoint:** simulated winner realises a partial leg + trails — human review
+- [x] Task 7: partial take-profit — first TP touch banks a tier, moves stop to
+      break-even, clears TP so remainder trails; total PnL across legs
+- [x] Task 8: `takeProfitTierPct` + `breakEvenAfterTier` in BotSettings (bounds,
+      defaults, normalize, engine.applySettings); `takeProfitTierPct` in web
+      form. `breakEvenAfterTier` is API/normalize-settable; no dedicated UI toggle.
+- [x] **Checkpoint:** 348 tests + api/web builds green — awaiting human review
 
 ## Phase 4 — Alpha Scoring vs Buy-and-Hold BTC (Item 2)
 - [ ] Task 9: Benchmark return + `alpha` in `NarrationStats`

@@ -8,9 +8,15 @@ import { OrderManager } from './order-manager'
 export interface PositionClosedEvent {
   coin: string
   fillPrice: number
-  /** Net PnL after fees (negative = loss). */
+  /**
+   * Net PnL after fees (negative = loss). For a full close this is the total
+   * across all legs (partial take-profits plus the final exit); for a partial
+   * exit it is just that leg's realised PnL.
+   */
   pnl: number
   reason: 'sell' | 'stop' | 'takeprofit'
+  /** True when the position was only partially closed and stays open. */
+  partial: boolean
 }
 
 interface TradingEngineConfig {
@@ -29,6 +35,14 @@ interface TradingEngineConfig {
   slippageBps?: number
   /** Trailing stop percentage below the high-water mark. Default: 0.10 (10%). */
   trailingStopPct?: number
+  /**
+   * Fraction of a position sold the first time price hits take-profit.
+   * The remainder rides the trailing stop. 1 = no partial (full TP exit).
+   * Default: 0.5.
+   */
+  takeProfitTierPct?: number
+  /** Move the stop to break-even after the take-profit tier is banked. Default: true. */
+  breakEvenAfterTier?: boolean
   /** Called whenever a position is closed, from both LLM sell decisions and stop/TP exits. */
   onPositionClosed?: (event: PositionClosedEvent) => void | Promise<void>
 }
@@ -56,6 +70,13 @@ export class TradingEngine {
   private dailyLossLimitPct: number
   private readonly feeRate: number
   private readonly trailingStopPct: number
+  // Mutable: updated at runtime via applySettings().
+  private takeProfitTierPct: number
+  private breakEvenAfterTier: boolean
+  /** Realised PnL banked from partial take-profits, per still-open coin. */
+  private readonly partialRealisedPnl = new Map<string, number>()
+  /** Coins whose take-profit tier has already been banked this position. */
+  private readonly tierTaken = new Set<string>()
   private readonly onPositionClosed: ((event: PositionClosedEvent) => void | Promise<void>) | undefined
   private dailyStartCapital: number
   private currentUtcDay: number
@@ -69,6 +90,8 @@ export class TradingEngine {
     this.dailyLossLimitPct = config.dailyLossLimitPct ?? 0.05
     this.feeRate = config.feeRate ?? 0
     this.trailingStopPct = config.trailingStopPct ?? 0.10
+    this.takeProfitTierPct = config.takeProfitTierPct ?? 0.5
+    this.breakEvenAfterTier = config.breakEvenAfterTier ?? true
     this.onPositionClosed = config.onPositionClosed
     this.currentUtcDay = Math.floor(Date.now() / 86400000)
     this.dailyStartCapital = this.currentEquity()
@@ -79,9 +102,17 @@ export class TradingEngine {
    * `paperMode` is provided the order manager is flipped between simulated
    * and real fills in place.
    */
-  applySettings(settings: { maxPositions: number; dailyLossLimitPct: number; paperMode?: boolean }): void {
+  applySettings(settings: {
+    maxPositions: number
+    dailyLossLimitPct: number
+    takeProfitTierPct?: number
+    breakEvenAfterTier?: boolean
+    paperMode?: boolean
+  }): void {
     this.maxPositions = settings.maxPositions
     this.dailyLossLimitPct = settings.dailyLossLimitPct
+    if (settings.takeProfitTierPct !== undefined) this.takeProfitTierPct = settings.takeProfitTierPct
+    if (settings.breakEvenAfterTier !== undefined) this.breakEvenAfterTier = settings.breakEvenAfterTier
     if (settings.paperMode !== undefined) this.orders.setPaper(settings.paperMode)
   }
 
@@ -198,12 +229,11 @@ export class TradingEngine {
           : position.size
         const sellFee = grossProceeds * this.feeRate
         const netProceeds = grossProceeds - sellFee
-        const pnl = netProceeds - position.size
-        this.positions.close(decision.coin)
-        this.baseQty.delete(decision.coin)
-        this.currentPrices.delete(decision.coin)
+        const legPnl = netProceeds - position.size
+        const totalPnl = legPnl + (this.partialRealisedPnl.get(decision.coin) ?? 0)
         this.guard.releaseWithProceeds(position.size, netProceeds)
-        await this.onPositionClosed?.({ coin: decision.coin, fillPrice: order.fillPrice, pnl, reason: 'sell' })
+        this.closePositionBookkeeping(decision.coin)
+        await this.onPositionClosed?.({ coin: decision.coin, fillPrice: order.fillPrice, pnl: totalPnl, reason: 'sell', partial: false })
       }
 
       return { executed: true, order }
@@ -294,6 +324,13 @@ export class TradingEngine {
       const hitStop = current.stopLoss !== undefined && price <= current.stopLoss
       const hitTakeProfit = current.takeProfit !== undefined && price >= current.takeProfit
 
+      // First take-profit touch: bank a tier, move the stop to break-even, and
+      // let the remainder ride the trailing stop (takeProfit is then cleared).
+      if (hitTakeProfit && !hitStop && this.takeProfitTierPct < 1 && !this.tierTaken.has(current.coin)) {
+        await this.takePartialProfit(current, price)
+        continue
+      }
+
       if (!hitStop && !hitTakeProfit) continue
 
       const order = await this.orders.place({
@@ -308,16 +345,62 @@ export class TradingEngine {
           ? (current.size / current.entryPrice) * order.fillPrice
           : current.size
         const netProceeds = grossProceeds * (1 - this.feeRate)
-        const pnl = netProceeds - current.size
+        const legPnl = netProceeds - current.size
+        const totalPnl = legPnl + (this.partialRealisedPnl.get(current.coin) ?? 0)
         const reason: PositionClosedEvent['reason'] = hitTakeProfit ? 'takeprofit' : 'stop'
-        this.positions.close(current.coin)
-        this.highWaterMarks.delete(current.coin)
-        this.baseQty.delete(current.coin)
-        this.currentPrices.delete(current.coin)
         this.guard.releaseWithProceeds(current.size, netProceeds)
-        await this.onPositionClosed?.({ coin: current.coin, fillPrice: order.fillPrice, pnl, reason })
+        this.closePositionBookkeeping(current.coin)
+        await this.onPositionClosed?.({ coin: current.coin, fillPrice: order.fillPrice, pnl: totalPnl, reason, partial: false })
       }
     }
+  }
+
+  /** Removes a closed position from all per-coin engine bookkeeping. */
+  private closePositionBookkeeping(coin: string): void {
+    this.positions.close(coin)
+    this.highWaterMarks.delete(coin)
+    this.baseQty.delete(coin)
+    this.currentPrices.delete(coin)
+    this.partialRealisedPnl.delete(coin)
+    this.tierTaken.delete(coin)
+  }
+
+  /**
+   * Banks the take-profit tier: sells `takeProfitTierPct` of the position,
+   * moves the stop to break-even, and clears takeProfit so the remainder
+   * rides the trailing stop. The leg's PnL is accumulated so the eventual
+   * full close reports the total across all legs.
+   */
+  private async takePartialProfit(current: Position, price: number): Promise<void> {
+    const tierPct = this.takeProfitTierPct
+    const removedSize = current.size * tierPct
+    const fullBaseQty = this.baseQty.get(current.coin) ?? (current.entryPrice > 0 ? current.size / current.entryPrice : 0)
+    const removedBaseQty = fullBaseQty * tierPct
+
+    const order = await this.orders.place({
+      coin: current.coin, side: 'sell', size: removedSize, price, baseQty: removedBaseQty,
+    })
+    if (order.status !== 'filled') return
+
+    const grossProceeds = current.entryPrice > 0
+      ? (removedSize / current.entryPrice) * order.fillPrice
+      : removedSize
+    const netProceeds = grossProceeds * (1 - this.feeRate)
+    const legPnl = netProceeds - removedSize
+
+    this.positions.reduce(current.coin, tierPct)
+    this.baseQty.set(current.coin, fullBaseQty - removedBaseQty)
+    this.guard.releaseWithProceeds(removedSize, netProceeds)
+    this.partialRealisedPnl.set(current.coin, (this.partialRealisedPnl.get(current.coin) ?? 0) + legPnl)
+    this.tierTaken.add(current.coin)
+
+    // Move the stop to break-even — never looser than the current/trailed stop.
+    if (this.breakEvenAfterTier) {
+      this.positions.updateStopLoss(current.coin, Math.max(current.entryPrice, current.stopLoss ?? current.entryPrice))
+    }
+    this.positions.clearTakeProfit(current.coin)
+
+    await this.onPositionClosed?.({ coin: current.coin, fillPrice: order.fillPrice, pnl: legPnl, reason: 'takeprofit', partial: true })
   }
 
   getPositions(): Position[] {

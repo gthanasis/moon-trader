@@ -49,4 +49,25 @@ describe('PositionTracker', () => {
     expect(tracker.get('SOL/USDT')).toBeUndefined()
   })
 
+  it('reduces a position by a fraction, keeping the entry price', () => {
+    tracker.open({ coin: 'BTC/USDT', size: 200, entryPrice: 50000, currentPrice: 52000 })
+    tracker.reduce('BTC/USDT', 0.5)
+    const p = tracker.get('BTC/USDT')!
+    expect(p.size).toBe(100)
+    expect(p.entryPrice).toBe(50000)
+  })
+
+  it('ignores reduce with an out-of-range fraction', () => {
+    tracker.open({ coin: 'BTC/USDT', size: 200, entryPrice: 50000, currentPrice: 50000 })
+    tracker.reduce('BTC/USDT', 0)
+    tracker.reduce('BTC/USDT', 1)
+    expect(tracker.get('BTC/USDT')!.size).toBe(200)
+  })
+
+  it('clears a take-profit', () => {
+    tracker.open({ coin: 'BTC/USDT', size: 100, entryPrice: 50000, currentPrice: 50000, takeProfit: 55000 })
+    tracker.clearTakeProfit('BTC/USDT')
+    expect(tracker.get('BTC/USDT')!.takeProfit).toBeUndefined()
+  })
+
 })

@@ -171,8 +171,14 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
       dailyLossLimitPct: config.dailyLossLimitPct,
       feeRate: config.feeRate,
       slippageBps: config.slippageBps,
-      onPositionClosed: async ({ coin, fillPrice, pnl, reason }) => {
+      onPositionClosed: async ({ coin, fillPrice, pnl, reason, partial }) => {
         try {
+          if (partial) {
+            // A partial take-profit leaves the position open — the trade row
+            // stays open; the eventual full close reports the total PnL.
+            this.logger.log(`Partial ${reason} on ${coin}: banked ${pnl.toFixed(2)} at ${fillPrice}`)
+            return
+          }
           const openTrade = await this.tradeRepo.findOpenTradeByCoin(coin)
           if (openTrade) {
             await this.tradeRepo.closeTrade(openTrade.id, { exitPrice: fillPrice, closedAt: new Date(), pnl })

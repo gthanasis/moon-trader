@@ -95,6 +95,14 @@ const FIELDS: FieldDef[] = [
     step: 0.5,
     explain: 'Once the day loses this much, new buys stop until the next UTC day. Raise it to tolerate deeper drawdowns.',
   },
+  {
+    key: 'takeProfitTierPct',
+    label: 'Take-profit tier',
+    unit: '%',
+    scale: 100,
+    step: 5,
+    explain: 'How much of a position is banked the first time it hits take-profit; the rest rides the trailing stop. Set 100% to exit the whole position at once.',
+  },
 ]
 
 /** Logical sections shown on the page, in render order. */
@@ -108,7 +116,7 @@ const GROUPS: { name: string; hint: string; keys: FieldDef['key'][] }[] = [
   {
     name: 'Risk controls',
     hint: 'Limits that protect your capital',
-    keys: ['riskPerTradePct', 'maxPositions', 'dailyLossLimitPct'],
+    keys: ['riskPerTradePct', 'maxPositions', 'dailyLossLimitPct', 'takeProfitTierPct'],
   },
 ]
 

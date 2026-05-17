@@ -31,6 +31,10 @@ export interface BotSettings {
   dailyLossLimitPct: number
   /** Trade size (USD) at or below which the bot trades without manual approval. Default: 50. */
   autoTradeLimit: number
+  /** Fraction of a position banked the first time price hits take-profit. 1 = full exit. Default: 0.5. */
+  takeProfitTierPct: number
+  /** Move the stop to break-even once the take-profit tier is banked. Default: true. */
+  breakEvenAfterTier: boolean
   /**
    * When true the bot simulates fills instead of placing real orders.
    * Default: true (paper). The trading loop re-reads this every cycle and
@@ -40,7 +44,7 @@ export interface BotSettings {
 }
 
 /** Numeric settings keys — everything in BotSettings except the booleans and prompt strings. */
-export type NumericSettingKey = Exclude<keyof BotSettings, 'paperMode' | 'strategyPrompt' | 'promptTemplate'>
+export type NumericSettingKey = Exclude<keyof BotSettings, 'paperMode' | 'breakEvenAfterTier' | 'strategyPrompt' | 'promptTemplate'>
 
 /** Prompt-string settings keys. */
 export type PromptSettingKey = 'strategyPrompt' | 'promptTemplate'
@@ -150,6 +154,8 @@ export const DEFAULT_BOT_SETTINGS: BotSettings = {
   maxPositions: 5,
   dailyLossLimitPct: 0.05,
   autoTradeLimit: 50,
+  takeProfitTierPct: 0.5,
+  breakEvenAfterTier: true,
   paperMode: true,
 }
 
@@ -161,6 +167,7 @@ export const BOT_SETTINGS_BOUNDS: Record<NumericSettingKey, { min: number; max: 
   maxPositions: { min: 1, max: 50 },
   dailyLossLimitPct: { min: 0.005, max: 1 },
   autoTradeLimit: { min: 0, max: 1_000_000 },
+  takeProfitTierPct: { min: 0.1, max: 1 },
 }
 
 /** Everything in BotSettings a strategy preset configures — all but `paperMode`. */
@@ -196,6 +203,8 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
       maxPositions: 3,
       dailyLossLimitPct: 0.03,
       autoTradeLimit: 50,
+      takeProfitTierPct: 0.5,
+      breakEvenAfterTier: true,
       strategyPrompt: `You are a patient, long-horizon crypto trader. You are not here to catch every move — you are here to compound slowly and avoid mistakes.
 
 ## Strategy Guidelines
@@ -221,6 +230,8 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
       maxPositions: 5,
       dailyLossLimitPct: 0.05,
       autoTradeLimit: 50,
+      takeProfitTierPct: 0.5,
+      breakEvenAfterTier: true,
       strategyPrompt: `You are a momentum trader. You buy strength and sell weakness — you never try to catch a falling knife.
 
 ## Strategy Guidelines
@@ -245,6 +256,8 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
       maxPositions: 4,
       dailyLossLimitPct: 0.06,
       autoTradeLimit: 50,
+      takeProfitTierPct: 0.5,
+      breakEvenAfterTier: true,
       strategyPrompt: `You are a contrarian, mean-reversion trader. You buy quality coins when others panic.
 
 ## Strategy Guidelines
@@ -270,6 +283,8 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
       maxPositions: 8,
       dailyLossLimitPct: 0.12,
       autoTradeLimit: 50,
+      takeProfitTierPct: 0.5,
+      breakEvenAfterTier: true,
       strategyPrompt: `You are an aggressive, high-conviction crypto trader. You are here to maximise upside — you accept volatility and the occasional sharp loss as the cost of catching big moves.
 
 ## Strategy Guidelines
@@ -301,6 +316,7 @@ export function normalizeBotSettings(raw: unknown): BotSettings {
       }
     }
     if (typeof obj['paperMode'] === 'boolean') result.paperMode = obj['paperMode']
+    if (typeof obj['breakEvenAfterTier'] === 'boolean') result.breakEvenAfterTier = obj['breakEvenAfterTier']
     for (const key of ['strategyPrompt', 'promptTemplate'] as PromptSettingKey[]) {
       const val = obj[key]
       // Reject non-strings, empties and oversized blobs — fall back to default.
