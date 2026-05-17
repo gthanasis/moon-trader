@@ -14,7 +14,8 @@ numbering (1 critic+lessons, 2 alpha, 4 exits, 5 features+microstructure,
       `LlmDecision.features` JSONB snapshot (migration 20260517000000)
 - [x] Task 2: `BinanceFuturesSource` — funding rate + open interest, `microstructure` SignalType
 - [x] Task 3: Order-book depth imbalance added to `BinanceFuturesSource`
-- [ ] Task 3b: Liquidation websocket collector
+- [x] Task 3b: `LiquidationCollector` (ws stream, auto-reconnect, rolling
+      window) + `LiquidationSource`. NestJS provider registration → Task 4.
 - [ ] Task 4: Wire microstructure into pipeline + `{microstructure}` placeholder
 - [ ] **Checkpoint:** tests + builds green; `{features}`/`{microstructure}` in a live prompt — human review
 
