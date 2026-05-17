@@ -25,7 +25,7 @@ describe('runCycleWithPersistence — pause gating', () => {
     )
 
     expect(cycle.run).toHaveBeenCalledOnce()
-    expect(decisionRepo.saveDecision).toHaveBeenCalledWith(decision, 'blocked', null)
+    expect(decisionRepo.saveDecision).toHaveBeenCalledWith(decision, 'blocked', null, null)
     expect(result).not.toBeNull()
   })
 
@@ -45,7 +45,7 @@ describe('runCycleWithPersistence — pause gating', () => {
       async () => false,
     )
 
-    expect(decisionRepo.saveDecision).toHaveBeenCalledWith(decision, 'executed', null)
+    expect(decisionRepo.saveDecision).toHaveBeenCalledWith(decision, 'executed', null, null)
     expect(tradeRepo.saveTrade).not.toHaveBeenCalled()
     expect(decisionRepo.linkDecisionToTrade).not.toHaveBeenCalled()
   })

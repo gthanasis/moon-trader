@@ -1,81 +1,19 @@
-import type { TradingContext, Candle, PromptPlaceholderName } from '../common'
+import type { TradingContext, Candle, FeatureSet, PromptPlaceholderName } from '../common'
 import { DEFAULT_STRATEGY_PROMPT, DEFAULT_PROMPT_TEMPLATE, CORE_SYSTEM_RULES } from '../common'
+import { computeFeatures } from './features'
 
-function ema(values: number[], period: number): number {
-  if (values.length === 0) return 0
-  const k = 2 / (period + 1)
-  let result = values[0]
-  for (let i = 1; i < values.length; i++) result = values[i] * k + result * (1 - k)
-  return result
-}
-
-function rsi(closes: number[], period = 14): number {
-  if (closes.length < period + 1) return 50
-  let gains = 0, losses = 0
-  for (let i = closes.length - period; i < closes.length; i++) {
-    const delta = closes[i] - closes[i - 1]
-    if (delta > 0) gains += delta
-    else losses -= delta
-  }
-  if (losses === 0) return 100
-  const rs = gains / losses
-  return 100 - 100 / (1 + rs)
-}
-
-function atr(candles: Candle[], period = 14): number {
-  if (candles.length < 2) return 0
-  const trs: number[] = []
-  for (let i = 1; i < candles.length; i++) {
-    const c = candles[i], prev = candles[i - 1]
-    trs.push(Math.max(c.high - c.low, Math.abs(c.high - prev.close), Math.abs(c.low - prev.close)))
-  }
-  const slice = trs.slice(-period)
-  return slice.reduce((a, b) => a + b, 0) / slice.length
-}
-
-function realisedVol(candles: Candle[], period = 20): number {
-  if (candles.length < period + 1) return 0
-  const slice = candles.slice(-period - 1)
-  const closes = slice.map(c => c.close)
-  const logReturns = closes.slice(1).map((c, i) => Math.log(c / closes[i]))
-  const mean = logReturns.reduce((a, b) => a + b, 0) / logReturns.length
-  const variance = logReturns.reduce((a, b) => a + (b - mean) ** 2, 0) / (logReturns.length - 1)
-  // Derive bar length from adjacent timestamps so annualisation is timeframe-agnostic.
-  const barMs = candles[candles.length - 1].timestamp.getTime() - candles[candles.length - 2].timestamp.getTime()
-  const barsPerYear = (365.25 * 24 * 3600 * 1000) / Math.max(barMs, 1)
-  return Math.sqrt(variance * barsPerYear)
-}
-
-function volZScore(volumes: number[], period = 20): number {
-  if (volumes.length < period + 1) return 0
-  const slice = volumes.slice(-period)
-  const mean = slice.reduce((a, b) => a + b, 0) / slice.length
-  const std = Math.sqrt(slice.reduce((a, b) => a + (b - mean) ** 2, 0) / slice.length)
-  if (std === 0) return 0
-  return (volumes[volumes.length - 1] - mean) / std
+/** Compact inline indicator string embedded next to each coin's price candles. */
+function formatIndicators(f: FeatureSet): string {
+  const ema20str = `EMA20${f.ema20Distance >= 0 ? '+' : ''}${f.ema20Distance.toFixed(1)}%`
+  const ema50str = `EMA50${f.ema50Distance >= 0 ? '+' : ''}${f.ema50Distance.toFixed(1)}%`
+  return `RSI(14)=${f.rsi14.toFixed(1)} ATR(14)=${f.atr14.toFixed(1)} ` +
+    `vol=${(f.realisedVol * 100).toFixed(1)}% ${ema20str} ${ema50str} trend=${f.trend} ` +
+    `volZ=${f.volumeZScore.toFixed(2)}`
 }
 
 function computeIndicators(candles: Candle[]): string {
-  if (candles.length < 2) return 'insufficient data'
-  const closes = candles.map(c => c.close)
-  const volumes = candles.map(c => c.volume)
-  const lastClose = closes[closes.length - 1]
-
-  const rsi14 = rsi(closes).toFixed(1)
-
-  const ema20val = ema(closes, 20)
-  const ema50val = ema(closes, 50)
-  const ema20dist = ((lastClose - ema20val) / ema20val * 100)
-  const ema50dist = ((lastClose - ema50val) / ema50val * 100)
-  const ema20str = `EMA20${ema20dist >= 0 ? '+' : ''}${ema20dist.toFixed(1)}%`
-  const ema50str = `EMA50${ema50dist >= 0 ? '+' : ''}${ema50dist.toFixed(1)}%`
-
-  const atr14 = atr(candles).toFixed(1)
-  const vol = (realisedVol(candles) * 100).toFixed(1)
-  const volZ = volZScore(volumes).toFixed(2)
-  const trend = ema20val > ema50val ? 'bullish' : 'bearish'
-
-  return `RSI(14)=${rsi14} ATR(14)=${atr14} vol=${vol}% ${ema20str} ${ema50str} trend=${trend} volZ=${volZ}`
+  const features = computeFeatures(candles)
+  return features ? formatIndicators(features) : 'insufficient data'
 }
 
 function renderCapital(ctx: TradingContext): string {
@@ -116,6 +54,25 @@ function renderPrices(ctx: TradingContext): string {
       return `${coin}${indicatorsLine}\n${macro}${rows}`
     })
     .join('\n\n')
+}
+
+/** Structured one-line-per-coin block of the deterministic feature set. */
+function renderFeatures(ctx: TradingContext): string {
+  const ohlcv = ctx.snapshot.ohlcv
+  const coins = Object.keys(ohlcv)
+  if (coins.length === 0) return 'No feature data available'
+  return coins
+    .map(coin => {
+      const f = computeFeatures(ohlcv[coin])
+      if (!f) return `${coin}: insufficient data`
+      const ema20 = `${f.ema20Distance >= 0 ? '+' : ''}${f.ema20Distance.toFixed(1)}%`
+      const ema50 = `${f.ema50Distance >= 0 ? '+' : ''}${f.ema50Distance.toFixed(1)}%`
+      const window = `${f.windowReturn >= 0 ? '+' : ''}${f.windowReturn.toFixed(2)}%`
+      return `${coin}: RSI ${f.rsi14.toFixed(1)} | trend ${f.trend} | EMA20 ${ema20} | ` +
+        `EMA50 ${ema50} | ATR ${f.atr14.toFixed(1)} | vol ${(f.realisedVol * 100).toFixed(1)}% | ` +
+        `volZ ${f.volumeZScore.toFixed(2)} | window ${window}`
+    })
+    .join('\n')
 }
 
 function renderSignals(ctx: TradingContext): string {
@@ -164,6 +121,7 @@ const PLACEHOLDERS: Record<PromptPlaceholderName, (ctx: TradingContext) => strin
   capital: renderCapital,
   positions: renderPositions,
   prices: renderPrices,
+  features: renderFeatures,
   signals: renderSignals,
   trades: renderTrades,
   openOrders: renderOpenOrders,

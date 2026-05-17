@@ -52,7 +52,7 @@ export async function runCycleWithPersistence(
       blockedReason,
     })
 
-    const decisionId = await decisionRepo.saveDecision(result.decision, status, blockedReason).catch(err => {
+    const decisionId = await decisionRepo.saveDecision(result.decision, status, blockedReason, result.features ?? null).catch(err => {
       logger.error(`Failed to persist decision: ${String(err)}`)
       return null
     })

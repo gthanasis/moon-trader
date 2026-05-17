@@ -56,6 +56,7 @@ export const PROMPT_PLACEHOLDERS = [
   { name: 'capital', description: 'Available capital in USD' },
   { name: 'positions', description: 'Open positions with unrealized P&L' },
   { name: 'prices', description: 'Recent candles + indicators per coin' },
+  { name: 'features', description: 'Deterministic technical features per coin (RSI, trend, ATR, vol)' },
   { name: 'signals', description: 'Recent news / sentiment / macro signals' },
   { name: 'trades', description: 'Most recent trades with P&L' },
   { name: 'openOrders', description: 'Currently open (unfilled) orders' },
@@ -103,6 +104,9 @@ Available capital: {capital}
 
 ## Price Data (recent candles)
 {prices}
+
+## Technical Features (deterministic, computed from candles)
+{features}
 
 ## Recent Signals (most recent first)
 {signals}

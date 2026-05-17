@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-import type { LLMDecision } from '../../common'
+import type { LLMDecision, FeatureSet } from '../../common'
 import { PrismaService } from '../prisma.service'
 
 export type DecisionStatus = 'executed' | 'blocked' | 'pending' | 'approved' | 'rejected'
@@ -53,6 +53,7 @@ export class DecisionRepository {
     decision: LLMDecision,
     status: DecisionStatus = 'executed',
     blockedReason: string | null = null,
+    features: FeatureSet | null = null,
   ): Promise<string> {
     const row = await this.prisma.llmDecision.create({
       data: {
@@ -61,6 +62,8 @@ export class DecisionRepository {
         stopLoss: decision.stopLoss ?? null, takeProfit: decision.takeProfit ?? null,
         status,
         blockedReason,
+        // Cast mirrors NarrationRepository — Prisma's Json input lacks an index signature.
+        features: features ? (features as object) : undefined,
       },
     })
     return row.id

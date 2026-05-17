@@ -1,5 +1,6 @@
-import type { LLMDecision, TradingContext, WorldSnapshot, Position, Order, Trade, NarrationGranularity } from '../common'
+import type { LLMDecision, TradingContext, WorldSnapshot, Position, Order, Trade, NarrationGranularity, FeatureSet } from '../common'
 import type { LLMAdapter } from './adapters/base'
+import { computeFeatures } from './features'
 
 export interface PipelineLike {
   fetch(): Promise<WorldSnapshot>
@@ -58,6 +59,8 @@ export interface CycleResult {
   reason?: string
   /** True when the buy added to an existing position rather than opening a new one. */
   scaledIn?: boolean
+  /** Deterministic feature snapshot for the decision's coin at decide time. */
+  features?: FeatureSet | null
 }
 
 export class EvaluationCycle {
@@ -132,7 +135,10 @@ export class EvaluationCycle {
 
     const results: CycleResult[] = []
     for (const decision of ordered) {
-      results.push(await this.evaluateDecision(decision, snapshot))
+      const result = await this.evaluateDecision(decision, snapshot)
+      // Snapshot the coin's deterministic features as they were at decide time.
+      result.features = computeFeatures(snapshot.ohlcv[decision.coin] ?? [])
+      results.push(result)
     }
     return results
   }

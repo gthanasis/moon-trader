@@ -1,4 +1,5 @@
 export * from './types/signal'
+export * from './types/feature'
 export * from './types/trade'
 export * from './types/decision'
 export * from './types/backtest'
