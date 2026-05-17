@@ -7,11 +7,35 @@ welcome.
 
 1. Fork and clone the repo.
 2. Follow the setup steps in the [README](README.md#setup).
-3. Create a branch for your change.
+
+## Branching and pull requests
+
+**All changes land through a pull request from a feature branch — never commit
+directly to `main`.** This applies to everyone, including maintainers and
+coding agents, and to changes of any size.
+
+1. Branch from an up-to-date `main`:
+
+   ```bash
+   git checkout main && git pull
+   git checkout -b <type>/<short-description>   # e.g. feat/partial-exits, fix/stop-loss-fill
+   ```
+
+2. Commit your work to that branch.
+3. Push it and open a PR:
+
+   ```bash
+   git push -u origin <branch>
+   gh pr create
+   ```
+
+4. Merge only after CI is green and the PR has been reviewed.
+
+Do not push to `main` and do not force-push shared branches.
 
 ## Development workflow
 
-Before opening a pull request, make sure these pass:
+Before opening a pull request, make sure these pass — CI runs all of them:
 
 ```bash
 pnpm install
