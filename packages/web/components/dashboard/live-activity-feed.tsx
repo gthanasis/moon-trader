@@ -126,8 +126,15 @@ export function LiveActivityFeed() {
   const events = useLiveEvents()
   const [open, setOpen] = useState<Record<string, boolean>>({})
 
+  // `decision_made` and `trade_opened` are already represented by the decision
+  // and trade rows the queries return — rendering the events too would double
+  // them. They still serve their purpose: triggering the cache refetch.
+  const renderedEvents = events.filter(
+    e => e.type !== 'decision_made' && e.type !== 'trade_opened',
+  )
+
   const items: FeedItem[] = [
-    ...events.map(eventToItem),
+    ...renderedEvents.map(eventToItem),
     ...decisions.map(decisionToItem),
   ]
     .sort((a, b) => b.at - a.at)
