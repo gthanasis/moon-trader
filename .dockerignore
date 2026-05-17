@@ -10,5 +10,9 @@ node_modules
 design
 docs
 tasks
+e2e
+playwright.config.ts
+playwright-report
+test-results
 **/.env
 **/.env.local

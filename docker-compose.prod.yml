@@ -1,6 +1,11 @@
 # Production stack — Postgres + API + web. Every published port is bound to
 # 127.0.0.1, so nothing is reachable from the public internet. Access the
 # dashboard via an SSH tunnel (see DEPLOY.md).
+#
+# Distinct project name so this never collides with the dev docker-compose.yml
+# (which also defines a `postgres` service) when both run on one machine.
+name: trader-prod
+
 services:
   postgres:
     image: postgres:16-alpine

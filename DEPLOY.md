@@ -56,6 +56,11 @@ git pull && docker compose -f docker-compose.prod.yml up -d --build
 
 ## Notes
 
+- `POSTGRES_PASSWORD` is written into the database volume the first time the
+  `postgres` container initialises. Changing it later in `.env` will *not*
+  update the existing database — you would need to recreate the volume
+  (`docker compose -f docker-compose.prod.yml down -v`, which destroys data).
+  Pick the password once, before the first `up`.
 - `NEXT_PUBLIC_API_URL` is baked into the web bundle at build time and
   defaults to `http://localhost:4000` (correct for the SSH-tunnel setup).
   Override it as a build arg only if you front the API differently.

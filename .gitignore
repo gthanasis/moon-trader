@@ -16,5 +16,10 @@ build/
 .claude/
 .playwright-mcp/
 
+# Playwright e2e output
+/playwright-report/
+/test-results/
+/blob-report/
+
 # Local planning scratchpads — not part of the public project
 tasks/
