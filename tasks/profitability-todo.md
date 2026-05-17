@@ -13,7 +13,7 @@ numbering (1 critic+lessons, 2 alpha, 4 exits, 5 features+microstructure,
 - [x] Task 1: typed `FeatureSet` + `computeFeatures`, `{features}` placeholder,
       `LlmDecision.features` JSONB snapshot (migration 20260517000000)
 - [x] Task 2: `BinanceFuturesSource` — funding rate + open interest, `microstructure` SignalType
-- [ ] Task 3: Order-book-imbalance data source
+- [x] Task 3: Order-book depth imbalance added to `BinanceFuturesSource`
 - [ ] Task 3b: Liquidation websocket collector
 - [ ] Task 4: Wire microstructure into pipeline + `{microstructure}` placeholder
 - [ ] **Checkpoint:** tests + builds green; `{features}`/`{microstructure}` in a live prompt — human review
