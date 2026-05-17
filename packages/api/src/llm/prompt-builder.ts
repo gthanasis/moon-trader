@@ -76,14 +76,23 @@ function renderFeatures(ctx: TradingContext): string {
 }
 
 function renderSignals(ctx: TradingContext): string {
-  if (ctx.snapshot.signals.length === 0) return 'No signals available'
-  return ctx.snapshot.signals
+  // Microstructure signals render under {microstructure}; this stays news/sentiment/macro.
+  const signals = ctx.snapshot.signals.filter(s => s.type !== 'microstructure')
+  if (signals.length === 0) return 'No signals available'
+  return signals
     .slice(0, 20)
     .map(s => {
       const coins = s.coins ? ` [${s.coins.join(', ')}]` : ''
       return `[${s.timestamp.toISOString()}] [${s.type.toUpperCase()}]${coins} ${s.content}`
     })
     .join('\n')
+}
+
+/** Microstructure signals — funding, open interest, order book, liquidations. */
+function renderMicrostructure(ctx: TradingContext): string {
+  const micro = ctx.snapshot.signals.filter(s => s.type === 'microstructure')
+  if (micro.length === 0) return 'No microstructure data available'
+  return micro.map(s => `- ${s.content}`).join('\n')
 }
 
 function renderTrades(ctx: TradingContext): string {
@@ -123,6 +132,7 @@ const PLACEHOLDERS: Record<PromptPlaceholderName, (ctx: TradingContext) => strin
   prices: renderPrices,
   features: renderFeatures,
   signals: renderSignals,
+  microstructure: renderMicrostructure,
   trades: renderTrades,
   openOrders: renderOpenOrders,
   narration6h: renderNarration('6h', 'last-6h'),

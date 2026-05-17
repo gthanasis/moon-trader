@@ -3,7 +3,7 @@ import type { Subscription } from 'rxjs'
 import ccxt from 'ccxt'
 import { ClaudeAdapter, OpenAIAdapter, EvaluationCycle } from '../llm'
 import { TradingEngine, CcxtExchangeAdapter } from '../core'
-import { Pipeline, BinanceSource, FearAndGreedSource, RssNewsSource } from '../market-data'
+import { Pipeline, BinanceSource, FearAndGreedSource, RssNewsSource, BinanceFuturesSource, LiquidationCollector, LiquidationSource } from '../market-data'
 import { intervalToCron, type BotSettings } from '../common'
 import { TradeRepository } from '../prisma/repositories/trade.repository'
 import { DecisionRepository } from '../prisma/repositories/decision.repository'
@@ -34,6 +34,7 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
   private scheduler?: Scheduler
   private engine?: TradingEngine
   private settingsSub?: Subscription
+  private liquidationCollector?: LiquidationCollector
 
   constructor(
     private readonly tradeRepo: TradeRepository,
@@ -84,6 +85,7 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
   onModuleDestroy(): void {
     this.scheduler?.stop()
     this.settingsSub?.unsubscribe()
+    this.liquidationCollector?.stop()
   }
 
   /** Test/web seam: the trading engine, once the loop has started. */
@@ -116,8 +118,19 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const binanceSource = new BinanceSource(binanceExchange as any)
 
+    // Live microstructure: a futures funding/OI/order-book source plus a
+    // websocket liquidation collector feeding a per-coin summary source.
+    const liquidationCollector = new LiquidationCollector({ coins: config.coins })
+    liquidationCollector.start()
+    this.liquidationCollector = liquidationCollector
+
     const basePipeline = new Pipeline({
-      sources: [new FearAndGreedSource(), new RssNewsSource()],
+      sources: [
+        new FearAndGreedSource(),
+        new RssNewsSource(),
+        new BinanceFuturesSource(config.coins),
+        new LiquidationSource(liquidationCollector, config.coins),
+      ],
       ohlcvSource: binanceSource,
       coins: config.coins,
       timeframe: config.timeframe,

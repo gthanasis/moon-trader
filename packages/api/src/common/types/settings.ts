@@ -58,6 +58,7 @@ export const PROMPT_PLACEHOLDERS = [
   { name: 'prices', description: 'Recent candles + indicators per coin' },
   { name: 'features', description: 'Deterministic technical features per coin (RSI, trend, ATR, vol)' },
   { name: 'signals', description: 'Recent news / sentiment / macro signals' },
+  { name: 'microstructure', description: 'Futures funding, open interest, order-book imbalance, liquidations' },
   { name: 'trades', description: 'Most recent trades with P&L' },
   { name: 'openOrders', description: 'Currently open (unfilled) orders' },
   { name: 'narration6h', description: "Bot's own recap of the last 6 hours" },
@@ -110,6 +111,9 @@ Available capital: {capital}
 
 ## Recent Signals (most recent first)
 {signals}
+
+## Market Microstructure (funding, open interest, order book, liquidations)
+{microstructure}
 
 ## Recent Trades
 {trades}

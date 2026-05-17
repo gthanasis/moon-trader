@@ -72,6 +72,31 @@ describe('buildPrompt', () => {
     expect(user).not.toContain('Signal 24')
   })
 
+  it('renders microstructure signals in their own section, not under signals', () => {
+    const context: TradingContext = {
+      ...emptyContext,
+      snapshot: {
+        timestamp: new Date(),
+        signals: [
+          { source: 'binance-futures', type: 'microstructure' as const, content: 'BTC/USDT funding rate: 0.0100% (longs pay shorts)', timestamp: new Date(), coins: ['BTC/USDT'] },
+          { source: 'rss-news', type: 'news' as const, content: 'Some headline', timestamp: new Date() },
+        ],
+        ohlcv: {},
+      },
+    }
+    const { user } = buildPrompt(context)
+    expect(user).toContain('Market Microstructure')
+    expect(user).toContain('funding rate: 0.0100%')
+    // The microstructure signal must not be duplicated into the news signals block.
+    const signalsBlock = user.slice(user.indexOf('Recent Signals'), user.indexOf('Market Microstructure'))
+    expect(signalsBlock).not.toContain('funding rate')
+  })
+
+  it('shows a no-data line when there are no microstructure signals', () => {
+    const { user } = buildPrompt(emptyContext)
+    expect(user).toContain('No microstructure data available')
+  })
+
   it('system prompt instructs use of make_trading_decision tool', () => {
     const { system } = buildPrompt(emptyContext)
     expect(system).toContain('make_trading_decision')

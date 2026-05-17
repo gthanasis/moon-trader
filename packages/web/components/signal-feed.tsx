@@ -1,11 +1,12 @@
 import type { Signal, SignalType } from '@api/common'
 
 const DOT_COLOR: Record<SignalType, string> = {
-  news:      'var(--neg)',
-  sentiment: 'var(--warn)',
-  onchain:   'var(--pos)',
-  macro:     'var(--info)',
-  price:     'var(--muted)',
+  news:           'var(--neg)',
+  sentiment:      'var(--warn)',
+  onchain:        'var(--pos)',
+  macro:          'var(--info)',
+  price:          'var(--muted)',
+  microstructure: 'var(--info)',
 }
 
 interface SignalFeedProps {

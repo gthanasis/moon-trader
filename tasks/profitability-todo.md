@@ -16,8 +16,10 @@ numbering (1 critic+lessons, 2 alpha, 4 exits, 5 features+microstructure,
 - [x] Task 3: Order-book depth imbalance added to `BinanceFuturesSource`
 - [x] Task 3b: `LiquidationCollector` (ws stream, auto-reconnect, rolling
       window) + `LiquidationSource`. NestJS provider registration → Task 4.
-- [ ] Task 4: Wire microstructure into pipeline + `{microstructure}` placeholder
-- [ ] **Checkpoint:** tests + builds green; `{features}`/`{microstructure}` in a live prompt — human review
+- [x] Task 4: futures + liquidation sources wired into the live pipeline;
+      `{microstructure}` placeholder + default template; collector lifecycle
+      on TradingService onModuleDestroy
+- [x] **Checkpoint:** 331 tests + api/web builds green — awaiting human review
 
 ## Phase 2 — Regime Classification (Item 6)
 - [ ] Task 5: Deterministic regime classifier (`classifyRegime`)
