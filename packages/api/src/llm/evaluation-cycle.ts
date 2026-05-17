@@ -1,4 +1,4 @@
-import type { LLMDecision, TradingContext, WorldSnapshot, Position, Order, Trade, NarrationGranularity, FeatureSet, Regime } from '../common'
+import type { LLMDecision, TradingContext, WorldSnapshot, Position, Order, Trade, NarrationGranularity, FeatureSet, Regime, Lesson } from '../common'
 import type { LLMAdapter } from './adapters/base'
 import { computeFeatures } from './features'
 import { classifyRegime } from './regime'
@@ -35,6 +35,8 @@ export interface EvaluationCycleConfig {
   getRecentTrades?: () => Promise<Trade[]>
   /** Called each cycle to populate the narration recaps in the LLM context. */
   getNarrations?: () => Promise<Partial<Record<NarrationGranularity, string>>>
+  /** Called each cycle to populate the active critic lessons in the LLM context. */
+  getLessons?: () => Promise<Lesson[]>
   onApprovalNeeded?: (decision: LLMDecision) => Promise<boolean>
   notifier?: NotifierLike
   /**
@@ -96,11 +98,12 @@ export class EvaluationCycle {
    * independently, so a single cycle can open positions in multiple coins.
    */
   async run(): Promise<CycleResult[]> {
-    const { pipeline, adapter, engine, getRecentTrades, getNarrations } = this.config
+    const { pipeline, adapter, engine, getRecentTrades, getNarrations, getLessons } = this.config
 
     const snapshot = await pipeline.fetch()
     const recentTrades = (await getRecentTrades?.()) ?? []
     const narrations = await getNarrations?.()
+    const lessons = await getLessons?.()
 
     const context: TradingContext = {
       snapshot,
@@ -110,6 +113,7 @@ export class EvaluationCycle {
       openOrders: engine.getOpenOrders(),
       promptOverrides: this.config.promptOverrides,
       narrations,
+      lessons,
     }
 
     // Update position prices from latest candle closes, then enforce stop-losses.

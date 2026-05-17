@@ -64,6 +64,7 @@ export const PROMPT_PLACEHOLDERS = [
   { name: 'regime', description: 'Deterministic market regime per coin (trending / choppy / crashing / recovering)' },
   { name: 'signals', description: 'Recent news / sentiment / macro signals' },
   { name: 'microstructure', description: 'Futures funding, open interest, order-book imbalance, liquidations' },
+  { name: 'lessons', description: 'Active lessons the post-mortem critic learned from past periods' },
   { name: 'trades', description: 'Most recent trades with P&L' },
   { name: 'openOrders', description: 'Currently open (unfilled) orders' },
   { name: 'narration6h', description: "Bot's own recap of the last 6 hours" },
@@ -129,6 +130,9 @@ Available capital: {capital}
 
 ## Market Microstructure (funding, open interest, order book, liquidations)
 {microstructure}
+
+## Lessons Learned (from the post-mortem critic — apply these)
+{lessons}
 
 ## Recent Trades
 {trades}

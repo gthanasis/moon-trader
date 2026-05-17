@@ -1,6 +1,7 @@
 import type { WorldSnapshot } from './signal'
 import type { Position, Trade, Order } from './trade'
 import type { NarrationGranularity } from './narration'
+import type { Lesson } from './lesson'
 
 export interface LLMDecision {
   action: 'buy' | 'sell' | 'hold'
@@ -29,4 +30,9 @@ export interface TradingContext {
    * "no recap" line.
    */
   narrations?: Partial<Record<NarrationGranularity, string>>
+  /**
+   * Active lessons from the post-mortem critic, fed back to steer decisions
+   * via the `{lessons}` placeholder.
+   */
+  lessons?: Lesson[]
 }

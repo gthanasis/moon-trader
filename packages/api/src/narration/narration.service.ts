@@ -4,7 +4,8 @@ import { TradeRepository } from '../prisma/repositories/trade.repository'
 import { DecisionRepository } from '../prisma/repositories/decision.repository'
 import { NarrationRepository } from '../prisma/repositories/narration.repository'
 import { CandleRepository } from '../prisma/repositories/candle.repository'
-import { NarrationLlmService } from './narration-llm.service'
+import { LessonRepository } from '../prisma/repositories/lesson.repository'
+import { NarrationLlmService, type NarrationText } from './narration-llm.service'
 import { buildBlockPrompt, buildRollupPrompt } from './narration-prompt'
 import { computeStats, aggregateStats } from './narration-stats'
 import { periodEndOf } from './narration-periods'
@@ -27,7 +28,20 @@ export class NarrationService {
     private readonly narrations: NarrationRepository,
     private readonly llm: NarrationLlmService,
     private readonly candles: CandleRepository,
+    private readonly lessons: LessonRepository,
   ) {}
+
+  /** Persists the critic's new lessons and applies its verdicts on existing ones. */
+  private async applyLessons(text: NarrationText): Promise<void> {
+    for (const lesson of text.lessons) {
+      await this.lessons.propose(lesson).catch(err => this.logger.warn(`Lesson propose failed: ${String(err)}`))
+    }
+    for (const outcome of text.lessonOutcomes) {
+      await this.lessons
+        .addEvidence(outcome.text, outcome.verdict === 'validated' ? 'for' : 'against')
+        .catch(err => this.logger.warn(`Lesson evidence failed: ${String(err)}`))
+    }
+  }
 
   /** Buy-and-hold BTC return over a period — the narration benchmark. Fails open to 0. */
   private async benchmark(from: Date, to: Date): Promise<number> {
@@ -52,10 +66,11 @@ export class NarrationService {
   async generateFromRaw(granularity: NarrationGranularity, periodStart: Date): Promise<void> {
     const periodEnd = periodEndOf(granularity, periodStart)
 
-    const [trades, decisions, benchmarkReturn] = await Promise.all([
+    const [trades, decisions, benchmarkReturn, activeLessons] = await Promise.all([
       this.trades.findClosedBetween(periodStart, periodEnd),
       this.decisions.findBetween(periodStart, periodEnd),
       this.benchmark(periodStart, periodEnd),
+      this.lessons.activeLessons(),
     ])
 
     const stats = computeStats(trades, benchmarkReturn, this.referenceCapital)
@@ -74,8 +89,9 @@ export class NarrationService {
     }
 
     const text = await this.llm.narrate(
-      buildBlockPrompt({ granularity, periodStart, periodEnd, trades, decisions, stats }),
+      buildBlockPrompt({ granularity, periodStart, periodEnd, trades, decisions, stats, activeLessons }),
     )
+    await this.applyLessons(text)
 
     await this.narrations.upsert({
       granularity,
@@ -86,7 +102,7 @@ export class NarrationService {
       stats,
     })
     this.logger.log(
-      `Narration ${granularity} ${periodStart.toISOString()} (raw) — ${stats.trades} trades, pnl ${stats.pnl.toFixed(2)}`,
+      `Narration ${granularity} ${periodStart.toISOString()} (raw) — ${stats.trades} trades, alpha ${stats.alpha.toFixed(2)}%`,
     )
   }
 
@@ -107,7 +123,10 @@ export class NarrationService {
       return
     }
 
-    const benchmarkReturn = await this.benchmark(periodStart, periodEnd)
+    const [benchmarkReturn, activeLessons] = await Promise.all([
+      this.benchmark(periodStart, periodEnd),
+      this.lessons.activeLessons(),
+    ])
     const stats = aggregateStats(children.map(c => c.stats), benchmarkReturn, this.referenceCapital)
 
     // No trades across the whole period — canned summary, no LLM call.
@@ -124,8 +143,9 @@ export class NarrationService {
     }
 
     const text = await this.llm.narrate(
-      buildRollupPrompt({ granularity, periodStart, periodEnd, children, stats }),
+      buildRollupPrompt({ granularity, periodStart, periodEnd, children, stats, activeLessons }),
     )
+    await this.applyLessons(text)
 
     await this.narrations.upsert({
       granularity,

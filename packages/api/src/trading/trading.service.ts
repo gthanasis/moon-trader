@@ -11,6 +11,7 @@ import { SignalRepository } from '../prisma/repositories/signal.repository'
 import { CandleRepository } from '../prisma/repositories/candle.repository'
 import { BotStateRepository } from '../prisma/repositories/bot-state.repository'
 import { NarrationRepository } from '../prisma/repositories/narration.repository'
+import { LessonRepository } from '../prisma/repositories/lesson.repository'
 import type { NarrationGranularity } from '../common'
 import { SettingsService } from '../settings/settings.service'
 import { TelegramService } from '../telegram/telegram.service'
@@ -43,6 +44,7 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
     private readonly candleRepo: CandleRepository,
     private readonly botState: BotStateRepository,
     private readonly narrationRepo: NarrationRepository,
+    private readonly lessonRepo: LessonRepository,
     private readonly settings: SettingsService,
     private readonly telegram: TelegramService,
     private readonly events: EventsService,
@@ -209,6 +211,7 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
       minConfidence: config.minConfidence,
       getRecentTrades: () => this.tradeRepo.findRecentTrades(5),
       getNarrations: () => this.loadNarrations(),
+      getLessons: () => this.lessonRepo.activeLessons().catch(() => []),
       notifier,
       onApprovalNeeded: approvalManager
         ? async decision => (await approvalManager.requestApproval(decision)) === 'approved'

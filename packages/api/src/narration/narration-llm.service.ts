@@ -1,18 +1,61 @@
 import { Injectable, Logger } from '@nestjs/common'
 import Anthropic from '@anthropic-ai/sdk'
 import OpenAI from 'openai'
+import type { LessonCategory, LessonProposal } from '../common'
 import type { NarrationPrompt } from './narration-prompt'
 
-/** The free-text result of a narration LLM call. */
+/** The critic's verdict on an existing lesson, for one reviewed period. */
+export interface LessonOutcome {
+  text: string
+  verdict: 'validated' | 'contradicted'
+}
+
+/** The structured result of a post-mortem critic LLM call. */
 export interface NarrationText {
   summary: string
   assessment: string | null
+  /** New falsifiable lessons proposed by the critic. */
+  lessons: LessonProposal[]
+  /** Verdicts on the lessons already guiding the bot. */
+  lessonOutcomes: LessonOutcome[]
+}
+
+const VALID_CATEGORIES = new Set<LessonCategory>(['entry', 'exit', 'sizing', 'regime', 'risk', 'general'])
+
+/** Extracts well-formed lesson proposals from an untrusted JSON value. */
+function parseLessons(raw: unknown): LessonProposal[] {
+  if (!Array.isArray(raw)) return []
+  const out: LessonProposal[] = []
+  for (const item of raw) {
+    if (item && typeof item === 'object') {
+      const { text, category } = item as { text?: unknown; category?: unknown }
+      if (typeof text === 'string' && text.trim() && VALID_CATEGORIES.has(category as LessonCategory)) {
+        out.push({ text: text.trim(), category: category as LessonCategory })
+      }
+    }
+  }
+  return out
+}
+
+/** Extracts well-formed lesson verdicts from an untrusted JSON value. */
+function parseOutcomes(raw: unknown): LessonOutcome[] {
+  if (!Array.isArray(raw)) return []
+  const out: LessonOutcome[] = []
+  for (const item of raw) {
+    if (item && typeof item === 'object') {
+      const { text, verdict } = item as { text?: unknown; verdict?: unknown }
+      if (typeof text === 'string' && text.trim() && (verdict === 'validated' || verdict === 'contradicted')) {
+        out.push({ text: text.trim(), verdict })
+      }
+    }
+  }
+  return out
 }
 
 /**
- * Generates plain-language narration text via the LLM. Separate from the
- * trading `LLMAdapter` (which only emits structured decisions). Provider and
- * key come from LLM_PROVIDER / *_API_KEY env vars.
+ * Generates the post-mortem critique via the LLM. Separate from the trading
+ * `LLMAdapter` (which only emits structured decisions). Provider and key come
+ * from LLM_PROVIDER / *_API_KEY env vars.
  */
 @Injectable()
 export class NarrationLlmService {
@@ -47,7 +90,7 @@ export class NarrationLlmService {
     const client = new Anthropic({ apiKey })
     const res = await client.messages.create({
       model: process.env['NARRATION_MODEL'] ?? 'claude-haiku-4-5-20251001',
-      max_tokens: 512,
+      max_tokens: 1024,
       system: prompt.system,
       messages: [{ role: 'user', content: prompt.user }],
     })
@@ -60,15 +103,17 @@ export class NarrationLlmService {
     const match = raw.match(/\{[\s\S]*\}/)
     if (match) {
       try {
-        const obj = JSON.parse(match[0]) as { summary?: unknown; assessment?: unknown }
+        const obj = JSON.parse(match[0]) as Record<string, unknown>
         return {
-          summary: typeof obj.summary === 'string' ? obj.summary : raw.trim(),
-          assessment: typeof obj.assessment === 'string' ? obj.assessment : null,
+          summary: typeof obj['summary'] === 'string' ? obj['summary'] : raw.trim(),
+          assessment: typeof obj['assessment'] === 'string' ? obj['assessment'] : null,
+          lessons: parseLessons(obj['lessons']),
+          lessonOutcomes: parseOutcomes(obj['lessonOutcomes']),
         }
       } catch {
         this.logger.warn('Narration LLM reply was not valid JSON — using raw text')
       }
     }
-    return { summary: raw.trim(), assessment: null }
+    return { summary: raw.trim(), assessment: null, lessons: [], lessonOutcomes: [] }
   }
 }

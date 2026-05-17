@@ -1,4 +1,4 @@
-import type { Trade, Narration, NarrationStats, NarrationGranularity } from '../common'
+import type { Trade, Narration, NarrationStats, NarrationGranularity, Lesson } from '../common'
 import type { StoredDecision } from '../prisma/repositories/decision.repository'
 
 export interface NarrationPrompt {
@@ -6,10 +6,27 @@ export interface NarrationPrompt {
   user: string
 }
 
-const SYSTEM = `You explain a crypto trading bot's activity to a non-technical person watching a dashboard.
-Be concise, plain-spoken, and concrete. Avoid jargon. Never give financial advice.
-Reply ONLY with a JSON object of the form:
-{"summary": "<2-4 sentences on what happened>", "assessment": "<1-2 sentences judging whether the bot behaved sensibly>"}`
+/**
+ * The post-mortem critic. Its job is to find what went wrong and extract
+ * falsifiable lessons — not to reassure. Judges against alpha, not raw P&L.
+ */
+const SYSTEM = `You are a hard-nosed trading-performance critic reviewing one period of a crypto bot's activity.
+Your job is to find what the bot did WRONG and extract concrete, falsifiable lessons. You are not here to reassure.
+
+Rules:
+- Judge the period against ALPHA — the bot's return versus simply holding BTC. Raw profit is not success: a small gain while BTC ran far higher is a FAILURE, and a flat "cautious" period that trailed BTC is also a failure. Doing nothing is not free.
+- Attribute every loss, and every bit of alpha left on the table, to a specific and falsifiable cause.
+- A period with zero or negative alpha MUST yield at least one concrete lesson.
+- Lessons must be specific and testable — e.g. "do not buy when RSI is above 70 in a choppy regime" — never vague advice like "be more careful".
+- You are also given the lessons currently guiding the bot. For each, judge whether THIS period's evidence validated or contradicted it.
+
+Reply ONLY with a JSON object:
+{
+  "summary": "<2-4 sentences: what happened and the blunt verdict>",
+  "assessment": "<1-2 sentences judging performance against the BTC benchmark>",
+  "lessons": [{"text": "<new falsifiable rule>", "category": "entry|exit|sizing|regime|risk|general"}],
+  "lessonOutcomes": [{"text": "<exact text of an existing lesson>", "verdict": "validated|contradicted"}]
+}`
 
 function fmtUsd(n: number): string {
   return `${n >= 0 ? '+' : '-'}$${Math.abs(n).toFixed(2)}`
@@ -17,6 +34,14 @@ function fmtUsd(n: number): string {
 
 function fmtPct(n: number): string {
   return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`
+}
+
+/** Renders the active lessons block the critic judges against. */
+function renderActiveLessons(lessons: Lesson[]): string {
+  if (lessons.length === 0) return '(no lessons yet)'
+  return lessons
+    .map(l => `- [${l.category}] ${l.text} (evidence: ${l.evidenceFor} for, ${l.evidenceAgainst} against)`)
+    .join('\n')
 }
 
 /** Builds the LLM prompt for a finest-level (6h) narration block. */
@@ -27,8 +52,9 @@ export function buildBlockPrompt(input: {
   trades: Trade[]
   decisions: StoredDecision[]
   stats: NarrationStats
+  activeLessons: Lesson[]
 }): NarrationPrompt {
-  const { periodStart, periodEnd, trades, decisions, stats } = input
+  const { periodStart, periodEnd, trades, decisions, stats, activeLessons } = input
 
   const tradeLines = trades.length
     ? trades
@@ -40,7 +66,8 @@ export function buildBlockPrompt(input: {
     ? decisions
         .map(d => {
           const tag = d.status === 'blocked' ? ` [blocked: ${d.blockedReason ?? '?'}]` : ''
-          return `- ${d.action.toUpperCase()} ${d.coin} (confidence ${(d.confidence * 100).toFixed(0)}%)${tag}: ${d.reasoning}`
+          const regime = d.regime ? ` {${d.regime}}` : ''
+          return `- ${d.action.toUpperCase()} ${d.coin}${regime} (confidence ${(d.confidence * 100).toFixed(0)}%)${tag}: ${d.reasoning}`
         })
         .join('\n')
     : '(no decisions)'
@@ -59,7 +86,10 @@ ${tradeLines}
 Decisions the bot made this period:
 ${decisionLines}
 
-Write the JSON narration for this period.`
+Lessons currently guiding the bot — judge each against this period:
+${renderActiveLessons(activeLessons)}
+
+Write the JSON critique for this period — include lessons for anything that went wrong or any alpha left on the table.`
 
   return { system: SYSTEM, user }
 }
@@ -74,14 +104,15 @@ export function buildRollupPrompt(input: {
   periodEnd: Date
   children: Narration[]
   stats: NarrationStats
+  activeLessons: Lesson[]
 }): NarrationPrompt {
-  const { granularity, periodStart, periodEnd, children, stats } = input
+  const { granularity, periodStart, periodEnd, children, stats, activeLessons } = input
 
   const childLines = children
     .map(c => `- ${c.periodStart.toISOString()} (${c.granularity}): ${c.summary}`)
     .join('\n')
 
-  const user = `You are writing a ${granularity} recap by summarising its sub-period narrations.
+  const user = `You are writing a ${granularity} critique by reviewing its sub-period narrations.
 
 Period: ${periodStart.toISOString()} → ${periodEnd.toISOString()}
 
@@ -94,7 +125,10 @@ Totals for the whole period:
 Sub-period narrations:
 ${childLines || '(none)'}
 
-Write the JSON narration summarising this whole ${granularity}.`
+Lessons currently guiding the bot — judge each against this period:
+${renderActiveLessons(activeLessons)}
+
+Write the JSON critique summarising this whole ${granularity}.`
 
   return { system: SYSTEM, user }
 }

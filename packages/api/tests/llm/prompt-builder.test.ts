@@ -97,6 +97,27 @@ describe('buildPrompt', () => {
     expect(user).toContain('No microstructure data available')
   })
 
+  it('renders active critic lessons in the lessons section', () => {
+    const context: TradingContext = {
+      ...emptyContext,
+      lessons: [
+        {
+          id: 'l1', text: 'do not buy RSI above 70 in a choppy regime', category: 'entry',
+          evidenceFor: 3, evidenceAgainst: 0, status: 'active',
+          createdAt: new Date(), updatedAt: new Date(),
+        },
+      ],
+    }
+    const { user } = buildPrompt(context)
+    expect(user).toContain('Lessons Learned')
+    expect(user).toContain('do not buy RSI above 70 in a choppy regime')
+  })
+
+  it('shows a no-lessons line when none have been recorded', () => {
+    const { user } = buildPrompt(emptyContext)
+    expect(user).toContain('No lessons recorded yet')
+  })
+
   it('system prompt instructs use of make_trading_decision tool', () => {
     const { system } = buildPrompt(emptyContext)
     expect(system).toContain('make_trading_decision')

@@ -40,10 +40,13 @@ numbering (1 critic+lessons, 2 alpha, 4 exits, 5 features+microstructure,
       + `alpha`, narration prompt shows BTC benchmark vs bot alpha
 
 ## Phase 5 — Adversarial Critic + Lessons Ledger (Item 1)
-- [ ] Task 10: `Lesson` model, repository, migration
-- [ ] Task 11: Rewrite narration into adversarial post-mortem critic
-- [ ] Task 12: Feed lessons ledger back into the trading prompt
-- [ ] **Checkpoint:** narration emits lessons; prompt consumes them; alpha end-to-end — human review
+- [x] Task 10: `Lesson` model + `LessonRepository` (propose/addEvidence/
+      activeLessons, auto-retire) + migration 20260517020000
+- [x] Task 11: narration rewritten into an adversarial post-mortem critic —
+      judges alpha not raw PnL, emits falsifiable lessons + lesson verdicts
+- [x] Task 12: `{lessons}` placeholder feeds active lessons into the trading
+      prompt; critic verdicts tally evidence and auto-retire contradicted lessons
+- [x] **Checkpoint:** 361 tests + api/web builds green — awaiting human review
 
 ## Phase 6 — LLM Confidence Calibration (Item 7)
 - [ ] Task 13: Calibration computation service

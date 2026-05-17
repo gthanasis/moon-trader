@@ -125,3 +125,20 @@ model Narration {
   @@unique([granularity, periodStart])
   @@index([granularity, periodStart])
 }
+
+// A falsifiable trading lesson extracted by the post-mortem critic. Evidence
+// accumulates as later periods validate or contradict it; a lesson is retired
+// once the contradicting evidence dominates.
+model Lesson {
+  id              String   @id @default(cuid())
+  text            String   @unique
+  category        String
+  evidenceFor     Int      @default(0)
+  evidenceAgainst Int      @default(0)
+  // 'active' | 'retired'
+  status          String   @default("active")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
+}

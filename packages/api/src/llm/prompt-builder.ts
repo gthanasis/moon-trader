@@ -103,6 +103,13 @@ function renderRegime(ctx: TradingContext): string {
     .join('\n')
 }
 
+/** Active lessons the post-mortem critic has accumulated from past periods. */
+function renderLessons(ctx: TradingContext): string {
+  const lessons = ctx.lessons ?? []
+  if (lessons.length === 0) return 'No lessons recorded yet'
+  return lessons.map(l => `- [${l.category}] ${l.text}`).join('\n')
+}
+
 /** Microstructure signals — funding, open interest, order book, liquidations. */
 function renderMicrostructure(ctx: TradingContext): string {
   const micro = ctx.snapshot.signals.filter(s => s.type === 'microstructure')
@@ -149,6 +156,7 @@ const PLACEHOLDERS: Record<PromptPlaceholderName, (ctx: TradingContext) => strin
   regime: renderRegime,
   signals: renderSignals,
   microstructure: renderMicrostructure,
+  lessons: renderLessons,
   trades: renderTrades,
   openOrders: renderOpenOrders,
   narration6h: renderNarration('6h', 'last-6h'),

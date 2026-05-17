@@ -8,6 +8,7 @@ import type { DecisionRepository } from '../../src/prisma/repositories/decision.
 import type { NarrationRepository } from '../../src/prisma/repositories/narration.repository'
 import type { NarrationLlmService } from '../../src/narration/narration-llm.service'
 import type { CandleRepository } from '../../src/prisma/repositories/candle.repository'
+import type { LessonRepository } from '../../src/prisma/repositories/lesson.repository'
 
 function trade(pnl: number): Trade {
   return {
@@ -50,6 +51,7 @@ describe('NarrationService.generateBlock', () => {
   let narrations: NarrationRepository
   let llm: NarrationLlmService
   let candles: CandleRepository
+  let lessons: LessonRepository
   let service: NarrationService
 
   beforeEach(() => {
@@ -57,10 +59,15 @@ describe('NarrationService.generateBlock', () => {
     decisions = { findBetween: vi.fn(async () => []) } as unknown as DecisionRepository
     narrations = { upsert: vi.fn(async () => undefined) } as unknown as NarrationRepository
     llm = {
-      narrate: vi.fn(async () => ({ summary: 'Made one win, one loss.', assessment: 'Within risk limits.' })),
+      narrate: vi.fn(async () => ({ summary: 'Made one win, one loss.', assessment: 'Within risk limits.', lessons: [], lessonOutcomes: [] })),
     } as unknown as NarrationLlmService
     candles = { priceReturn: vi.fn(async () => 0) } as unknown as CandleRepository
-    service = new NarrationService(trades, decisions, narrations, llm, candles)
+    lessons = {
+      propose: vi.fn(async () => undefined),
+      addEvidence: vi.fn(async () => undefined),
+      activeLessons: vi.fn(async () => []),
+    } as unknown as LessonRepository
+    service = new NarrationService(trades, decisions, narrations, llm, candles, lessons)
   })
 
   it('upserts a 6h narration with computed stats and LLM text', async () => {
@@ -76,6 +83,17 @@ describe('NarrationService.generateBlock', () => {
     expect(arg['summary']).toBe('Made one win, one loss.')
     expect(arg['assessment']).toBe('Within risk limits.')
     expect(arg['stats']).toMatchObject({ pnl: 6, trades: 2, wins: 1, losses: 1, winRate: 0.5, benchmarkReturn: 0 })
+  })
+
+  it('persists new lessons and applies the critic verdicts on existing ones', async () => {
+    ;(llm.narrate as ReturnType<typeof vi.fn>).mockResolvedValue({
+      summary: 's', assessment: 'a',
+      lessons: [{ text: 'cut losers faster', category: 'exit' }],
+      lessonOutcomes: [{ text: 'an older lesson', verdict: 'contradicted' }],
+    })
+    await service.generateBlock(new Date('2026-05-16T00:00:00Z'))
+    expect(lessons.propose).toHaveBeenCalledWith({ text: 'cut losers faster', category: 'exit' })
+    expect(lessons.addEvidence).toHaveBeenCalledWith('an older lesson', 'against')
   })
 
   it('queries trades and decisions for the 6h window', async () => {
@@ -102,6 +120,7 @@ describe('NarrationService.generateRollup', () => {
   let narrations: NarrationRepository
   let llm: NarrationLlmService
   let candles: CandleRepository
+  let lessons: LessonRepository
   let service: NarrationService
 
   beforeEach(() => {
@@ -112,10 +131,15 @@ describe('NarrationService.generateRollup', () => {
       findChildren: vi.fn(async () => [childNarration(10), childNarration(-3)]),
     } as unknown as NarrationRepository
     llm = {
-      narrate: vi.fn(async () => ({ summary: 'A solid day overall.', assessment: 'Consistent.' })),
+      narrate: vi.fn(async () => ({ summary: 'A solid day overall.', assessment: 'Consistent.', lessons: [], lessonOutcomes: [] })),
     } as unknown as NarrationLlmService
     candles = { priceReturn: vi.fn(async () => 0) } as unknown as CandleRepository
-    service = new NarrationService(trades, decisions, narrations, llm, candles)
+    lessons = {
+      propose: vi.fn(async () => undefined),
+      addEvidence: vi.fn(async () => undefined),
+      activeLessons: vi.fn(async () => []),
+    } as unknown as LessonRepository
+    service = new NarrationService(trades, decisions, narrations, llm, candles, lessons)
   })
 
   it('aggregates child stats into the roll-up narration', async () => {
