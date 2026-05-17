@@ -22,7 +22,7 @@ numbering (1 critic+lessons, 2 alpha, 4 exits, 5 features+microstructure,
 - [x] **Checkpoint:** 331 tests + api/web builds green — awaiting human review
 
 ## Phase 2 — Regime Classification (Item 6)
-- [ ] Task 5: Deterministic regime classifier (`classifyRegime`)
+- [x] Task 5: `Regime` type + pure `classifyRegime` (BTC-context aware)
 - [ ] Task 6: Surface `{regime}` in prompt, persist on decisions, regime guidance
 - [ ] **Checkpoint:** decisions carry regime; regime-specific guidance live — human review
 

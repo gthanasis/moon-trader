@@ -24,3 +24,10 @@ export interface FeatureSet {
   /** Percent change from the first to the last candle in the window. */
   windowReturn: number
 }
+
+/**
+ * Coarse market state for a coin, derived deterministically from its
+ * `FeatureSet` (and BTC's, as market context). The LLM consumes the regime as
+ * an input and gets regime-specific guidance — it does not invent the regime.
+ */
+export type Regime = 'trending-up' | 'trending-down' | 'choppy' | 'crashing' | 'recovering'
