@@ -23,8 +23,9 @@ numbering (1 critic+lessons, 2 alpha, 4 exits, 5 features+microstructure,
 
 ## Phase 2 — Regime Classification (Item 6)
 - [x] Task 5: `Regime` type + pure `classifyRegime` (BTC-context aware)
-- [ ] Task 6: Surface `{regime}` in prompt, persist on decisions, regime guidance
-- [ ] **Checkpoint:** decisions carry regime; regime-specific guidance live — human review
+- [x] Task 6: `{regime}` placeholder + default template, `LlmDecision.regime`
+      column (migration 20260517010000), regime playbook in CORE_SYSTEM_RULES
+- [x] **Checkpoint:** 343 tests + api/web builds green — awaiting human review
 
 ## Phase 3 — Win/Loss Math: Partial TP + Trailing (Item 4)
 - [ ] Task 7: Partial take-profit + tiered exits in the engine

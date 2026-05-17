@@ -57,6 +57,7 @@ export const PROMPT_PLACEHOLDERS = [
   { name: 'positions', description: 'Open positions with unrealized P&L' },
   { name: 'prices', description: 'Recent candles + indicators per coin' },
   { name: 'features', description: 'Deterministic technical features per coin (RSI, trend, ATR, vol)' },
+  { name: 'regime', description: 'Deterministic market regime per coin (trending / choppy / crashing / recovering)' },
   { name: 'signals', description: 'Recent news / sentiment / macro signals' },
   { name: 'microstructure', description: 'Futures funding, open interest, order-book imbalance, liquidations' },
   { name: 'trades', description: 'Most recent trades with P&L' },
@@ -79,7 +80,14 @@ export const CORE_SYSTEM_RULES = `## Core Rules (enforced by the engine — do n
 - Only trade these pairs: BTC/USDT, ETH/USDT, BNB/USDT, SOL/USDT, XRP/USDT, ADA/USDT, DOGE/USDT, AVAX/USDT, DOT/USDT, MATIC/USDT
 - Always include a stop-loss price for every buy — buys without one are rejected
 - A minimum confidence threshold gates buys; when uncertain, choose hold
-- Use the make_trading_decision tool once per coin you have a view on — evaluate every coin in the price data independently and submit a separate decision for each, using 'hold' for any coin you would not trade this cycle`
+- Use the make_trading_decision tool once per coin you have a view on — evaluate every coin in the price data independently and submit a separate decision for each, using 'hold' for any coin you would not trade this cycle
+
+## Regime Playbook (the {regime} input is computed for you — act on it)
+- trending-up: the cleanest long environment — favour continuation buys on healthy pullbacks
+- trending-down: do not buy continuation; only consider a buy on a clear, confirmed reversal
+- crashing: stand down — no new buys; focus on protecting open positions
+- recovering: cautious mean-reversion buys are allowed, but size modestly — a bottom is imprecise
+- choppy: default to hold; act only on a high-conviction, confirmed setup`
 
 /** Editable strategy text. The locked core rules are appended after this. */
 export const DEFAULT_STRATEGY_PROMPT = `You are a professional crypto trading assistant. Analyze market conditions and make precise, disciplined trading decisions.
@@ -108,6 +116,9 @@ Available capital: {capital}
 
 ## Technical Features (deterministic, computed from candles)
 {features}
+
+## Market Regime (deterministic, per coin)
+{regime}
 
 ## Recent Signals (most recent first)
 {signals}

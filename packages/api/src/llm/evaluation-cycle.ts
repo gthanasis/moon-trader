@@ -1,6 +1,7 @@
-import type { LLMDecision, TradingContext, WorldSnapshot, Position, Order, Trade, NarrationGranularity, FeatureSet } from '../common'
+import type { LLMDecision, TradingContext, WorldSnapshot, Position, Order, Trade, NarrationGranularity, FeatureSet, Regime } from '../common'
 import type { LLMAdapter } from './adapters/base'
 import { computeFeatures } from './features'
+import { classifyRegime } from './regime'
 
 export interface PipelineLike {
   fetch(): Promise<WorldSnapshot>
@@ -61,6 +62,8 @@ export interface CycleResult {
   scaledIn?: boolean
   /** Deterministic feature snapshot for the decision's coin at decide time. */
   features?: FeatureSet | null
+  /** Deterministic market regime for the decision's coin at decide time. */
+  regime?: Regime | null
 }
 
 export class EvaluationCycle {
@@ -133,11 +136,16 @@ export class EvaluationCycle {
     const actionRank = { sell: 0, hold: 1, buy: 2 } as const
     const ordered = [...decisions].sort((a, b) => actionRank[a.action] - actionRank[b.action])
 
+    // BTC's features are market-wide context for every coin's regime.
+    const btcFeatures = computeFeatures(snapshot.ohlcv['BTC/USDT'] ?? [])
+
     const results: CycleResult[] = []
     for (const decision of ordered) {
       const result = await this.evaluateDecision(decision, snapshot)
-      // Snapshot the coin's deterministic features as they were at decide time.
-      result.features = computeFeatures(snapshot.ohlcv[decision.coin] ?? [])
+      // Snapshot the coin's deterministic features and regime as at decide time.
+      const features = computeFeatures(snapshot.ohlcv[decision.coin] ?? [])
+      result.features = features
+      result.regime = features ? classifyRegime(features, btcFeatures) : null
       results.push(result)
     }
     return results

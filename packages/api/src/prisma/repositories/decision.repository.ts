@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-import type { LLMDecision, FeatureSet } from '../../common'
+import type { LLMDecision, FeatureSet, Regime } from '../../common'
 import { PrismaService } from '../prisma.service'
 
 export type DecisionStatus = 'executed' | 'blocked' | 'pending' | 'approved' | 'rejected'
@@ -9,6 +9,8 @@ export interface StoredDecision extends LLMDecision {
   status: DecisionStatus
   /** When status='blocked', the reason the engine or risk gate rejected the decision. */
   blockedReason: string | null
+  /** Deterministic market regime for the coin at decide time. */
+  regime: Regime | null
   expiresAt: Date | null
   decidedAt: Date
 }
@@ -24,6 +26,7 @@ type DecisionRow = {
   takeProfit: number | null
   status: string
   blockedReason: string | null
+  regime: string | null
   expiresAt: Date | null
   decidedAt: Date
 }
@@ -40,6 +43,7 @@ function toStoredDecision(row: DecisionRow): StoredDecision {
     takeProfit: row.takeProfit ?? undefined,
     status: row.status as DecisionStatus,
     blockedReason: row.blockedReason,
+    regime: (row.regime as Regime | null) ?? null,
     expiresAt: row.expiresAt,
     decidedAt: row.decidedAt,
   }
@@ -54,6 +58,7 @@ export class DecisionRepository {
     status: DecisionStatus = 'executed',
     blockedReason: string | null = null,
     features: FeatureSet | null = null,
+    regime: Regime | null = null,
   ): Promise<string> {
     const row = await this.prisma.llmDecision.create({
       data: {
@@ -64,6 +69,7 @@ export class DecisionRepository {
         blockedReason,
         // Cast mirrors NarrationRepository — Prisma's Json input lacks an index signature.
         features: features ? (features as object) : undefined,
+        regime: regime ?? undefined,
       },
     })
     return row.id

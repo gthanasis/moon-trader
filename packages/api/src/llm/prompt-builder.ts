@@ -1,6 +1,7 @@
 import type { TradingContext, Candle, FeatureSet, PromptPlaceholderName } from '../common'
 import { DEFAULT_STRATEGY_PROMPT, DEFAULT_PROMPT_TEMPLATE, CORE_SYSTEM_RULES } from '../common'
 import { computeFeatures } from './features'
+import { classifyRegime } from './regime'
 
 /** Compact inline indicator string embedded next to each coin's price candles. */
 function formatIndicators(f: FeatureSet): string {
@@ -88,6 +89,20 @@ function renderSignals(ctx: TradingContext): string {
     .join('\n')
 }
 
+/** Per-coin deterministic market regime, BTC's features as market context. */
+function renderRegime(ctx: TradingContext): string {
+  const ohlcv = ctx.snapshot.ohlcv
+  const coins = Object.keys(ohlcv)
+  if (coins.length === 0) return 'No regime data available'
+  const btc = computeFeatures(ohlcv['BTC/USDT'] ?? [])
+  return coins
+    .map(coin => {
+      const f = computeFeatures(ohlcv[coin])
+      return `${coin}: ${f ? classifyRegime(f, btc) : 'unknown'}`
+    })
+    .join('\n')
+}
+
 /** Microstructure signals — funding, open interest, order book, liquidations. */
 function renderMicrostructure(ctx: TradingContext): string {
   const micro = ctx.snapshot.signals.filter(s => s.type === 'microstructure')
@@ -131,6 +146,7 @@ const PLACEHOLDERS: Record<PromptPlaceholderName, (ctx: TradingContext) => strin
   positions: renderPositions,
   prices: renderPrices,
   features: renderFeatures,
+  regime: renderRegime,
   signals: renderSignals,
   microstructure: renderMicrostructure,
   trades: renderTrades,

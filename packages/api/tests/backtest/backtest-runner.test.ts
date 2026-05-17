@@ -179,7 +179,7 @@ describe('BacktestRunner', () => {
     expect(onStep).toHaveBeenCalledTimes(3)
     // onStep receives the cycle's CycleResult list; for a hold, one entry with executed=false, reason='hold'.
     // features is null here because the backtest slice has no candles to compute from.
-    const expectedCycleResults = [{ decision, executedDecision: decision, executed: false, reason: 'hold', features: null }]
+    const expectedCycleResults = [{ decision, executedDecision: decision, executed: false, reason: 'hold', features: null, regime: null }]
     expect(onStep).toHaveBeenNthCalledWith(1, 1, 3, new Date(0), expectedCycleResults)
     expect(onStep).toHaveBeenNthCalledWith(2, 2, 3, new Date(intervalMs), expectedCycleResults)
     expect(onStep).toHaveBeenNthCalledWith(3, 3, 3, new Date(2 * intervalMs), expectedCycleResults)

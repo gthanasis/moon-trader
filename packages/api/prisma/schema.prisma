@@ -54,6 +54,8 @@ model LlmDecision {
   blockedReason String?
   // Deterministic FeatureSet snapshot for the decision's coin at decide time.
   features    Json?
+  // Deterministic market regime for the coin at decide time.
+  regime      String?
   expiresAt   DateTime?
   decidedAt   DateTime  @default(now())
   tradeId     String?

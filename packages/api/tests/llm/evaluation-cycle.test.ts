@@ -335,3 +335,43 @@ describe('EvaluationCycle with notifier', () => {
   })
 })
 
+describe('EvaluationCycle — regime tagging (Task 6)', () => {
+  const REGIMES = ['trending-up', 'trending-down', 'choppy', 'crashing', 'recovering']
+
+  const btcSnapshot = () => ({
+    timestamp: new Date(),
+    signals: [],
+    ohlcv: {
+      'BTC/USDT': Array.from({ length: 60 }, (_, i) => ({
+        timestamp: new Date(2026, 0, 1, 0, i),
+        open: 100 + i, high: 100 + i, low: 100 + i, close: 100 + i, volume: 1000,
+      })),
+    },
+  })
+
+  beforeEach(() => {
+    mockDecide.mockReset()
+    mockExecute.mockReset()
+    mockExecute.mockResolvedValue({ executed: true })
+    mockEngine.getPositions.mockReturnValue([])
+    mockEngine.availableCapital.mockReturnValue(1000)
+    mockEngine.checkStopLosses.mockResolvedValue(undefined)
+  })
+
+  it('tags each result with the coin regime computed from the snapshot', async () => {
+    mockFetch.mockResolvedValue(btcSnapshot())
+    mockDecide.mockResolvedValue({ action: 'hold', coin: 'BTC/USDT', size: 0, confidence: 0.5, reasoning: 'r' })
+    const cycle = new EvaluationCycle({ pipeline: mockPipeline as any, adapter: mockAdapter, engine: mockEngine as any, autoTradeLimit: 500 })
+    const [result] = await cycle.run()
+    expect(REGIMES).toContain(result.regime)
+  })
+
+  it('leaves regime null when the coin has no candle data', async () => {
+    mockFetch.mockResolvedValue(emptySnapshot)
+    mockDecide.mockResolvedValue({ action: 'hold', coin: 'BTC/USDT', size: 0, confidence: 0.5, reasoning: 'r' })
+    const cycle = new EvaluationCycle({ pipeline: mockPipeline as any, adapter: mockAdapter, engine: mockEngine as any, autoTradeLimit: 500 })
+    const [result] = await cycle.run()
+    expect(result.regime).toBeNull()
+  })
+})
+
