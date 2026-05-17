@@ -6,7 +6,7 @@ import { ModeProvider } from '@/components/mode-provider'
 import { QueryProvider } from '@/components/query-provider'
 
 export const metadata: Metadata = {
-  title: 'Trader Dashboard',
+  title: 'Moon Trader',
   description: 'LLM-driven crypto trading bot dashboard',
 }
 
