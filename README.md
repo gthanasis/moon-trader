@@ -1,10 +1,18 @@
+<div align="center">
+
+<img src="packages/web/app/icon.svg" alt="Moon Trader logo" width="72" height="72" />
+
 # moon-trader
+
+</div>
 
 An LLM-driven crypto trading bot. It pulls market and sentiment data on a
 schedule, asks a language model for a trade decision, runs that decision
 through hard-coded risk controls, and either executes it or asks you to
 approve it. It ships with a backtesting engine, a Next.js dashboard, and an
 optional Telegram bot.
+
+![Moon Trader dashboard](docs/screenshots/dashboard.png)
 
 > ## ⚠️ Disclaimer — Use at Your Own Risk
 >
