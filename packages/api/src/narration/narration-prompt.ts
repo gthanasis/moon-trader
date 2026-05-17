@@ -15,6 +15,10 @@ function fmtUsd(n: number): string {
   return `${n >= 0 ? '+' : '-'}$${Math.abs(n).toFixed(2)}`
 }
 
+function fmtPct(n: number): string {
+  return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`
+}
+
 /** Builds the LLM prompt for a finest-level (6h) narration block. */
 export function buildBlockPrompt(input: {
   granularity: NarrationGranularity
@@ -45,6 +49,7 @@ export function buildBlockPrompt(input: {
 
 Realised stats:
 - Net P&L: ${fmtUsd(stats.pnl)}
+- Benchmark: buy-and-hold BTC ${fmtPct(stats.benchmarkReturn)} over the period — bot alpha ${fmtPct(stats.alpha)}
 - Trades closed: ${stats.trades} (${stats.wins} wins, ${stats.losses} losses)
 - Win rate: ${(stats.winRate * 100).toFixed(0)}%
 
@@ -82,6 +87,7 @@ Period: ${periodStart.toISOString()} → ${periodEnd.toISOString()}
 
 Totals for the whole period:
 - Net P&L: ${fmtUsd(stats.pnl)}
+- Benchmark: buy-and-hold BTC ${fmtPct(stats.benchmarkReturn)} over the period — bot alpha ${fmtPct(stats.alpha)}
 - Trades closed: ${stats.trades} (${stats.wins} wins, ${stats.losses} losses)
 - Win rate: ${(stats.winRate * 100).toFixed(0)}%
 

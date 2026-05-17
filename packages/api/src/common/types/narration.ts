@@ -8,6 +8,10 @@ export interface NarrationStats {
   wins: number
   losses: number
   winRate: number
+  /** Buy-and-hold BTC return over the period, in % — the benchmark. */
+  benchmarkReturn: number
+  /** Bot return minus benchmark return, in % of reference capital. */
+  alpha: number
 }
 
 /**

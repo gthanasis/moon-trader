@@ -17,6 +17,21 @@ export class CandleRepository {
     })
   }
 
+  /**
+   * Buy-and-hold % return for a coin between the first and last candle in
+   * [from, to), across any timeframe. Returns null when there is too little
+   * data to measure — used as the narration benchmark.
+   */
+  async priceReturn(coin: string, from: Date, to: Date): Promise<number | null> {
+    const where = { coin, timestamp: { gte: from, lt: to } }
+    const [first, last] = await Promise.all([
+      this.prisma.candle.findFirst({ where, orderBy: { timestamp: 'asc' } }),
+      this.prisma.candle.findFirst({ where, orderBy: { timestamp: 'desc' } }),
+    ])
+    if (!first || !last || first.close <= 0) return null
+    return ((last.close - first.close) / first.close) * 100
+  }
+
   async findCandles(coin: string, timeframe: string, from: Date, to: Date, limit = 200_000): Promise<Candle[]> {
     const rows = await this.prisma.candle.findMany({
       where: { coin, timeframe, timestamp: { gte: from, lt: to } },

@@ -36,7 +36,8 @@ numbering (1 critic+lessons, 2 alpha, 4 exits, 5 features+microstructure,
 - [x] **Checkpoint:** 348 tests + api/web builds green — awaiting human review
 
 ## Phase 4 — Alpha Scoring vs Buy-and-Hold BTC (Item 2)
-- [ ] Task 9: Benchmark return + `alpha` in `NarrationStats`
+- [x] Task 9: `CandleRepository.priceReturn`, `NarrationStats.benchmarkReturn`
+      + `alpha`, narration prompt shows BTC benchmark vs bot alpha
 
 ## Phase 5 — Adversarial Critic + Lessons Ledger (Item 1)
 - [ ] Task 10: `Lesson` model, repository, migration

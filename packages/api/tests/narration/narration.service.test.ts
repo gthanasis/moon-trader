@@ -7,6 +7,7 @@ import type { TradeRepository } from '../../src/prisma/repositories/trade.reposi
 import type { DecisionRepository } from '../../src/prisma/repositories/decision.repository'
 import type { NarrationRepository } from '../../src/prisma/repositories/narration.repository'
 import type { NarrationLlmService } from '../../src/narration/narration-llm.service'
+import type { CandleRepository } from '../../src/prisma/repositories/candle.repository'
 
 function trade(pnl: number): Trade {
   return {
@@ -26,7 +27,20 @@ describe('computeStats', () => {
   })
 
   it('is zero-safe for an empty period', () => {
-    expect(computeStats([])).toEqual({ pnl: 0, trades: 0, wins: 0, losses: 0, winRate: 0 })
+    expect(computeStats([])).toEqual({ pnl: 0, trades: 0, wins: 0, losses: 0, winRate: 0, benchmarkReturn: 0, alpha: 0 })
+  })
+
+  it('reports negative alpha for a flat-cash period during a BTC rally', () => {
+    // No trades, BTC up 10% → alpha = 0 − 10 = −10. Doing nothing is not free.
+    const s = computeStats([], 10, 1000)
+    expect(s.benchmarkReturn).toBe(10)
+    expect(s.alpha).toBe(-10)
+  })
+
+  it('reports positive alpha when the bot beats buy-and-hold BTC', () => {
+    // +$50 on $1000 reference capital = +5% bot return; BTC +2% → alpha +3%.
+    const s = computeStats([trade(50)], 2, 1000)
+    expect(s.alpha).toBeCloseTo(3, 5)
   })
 })
 
@@ -35,6 +49,7 @@ describe('NarrationService.generateBlock', () => {
   let decisions: DecisionRepository
   let narrations: NarrationRepository
   let llm: NarrationLlmService
+  let candles: CandleRepository
   let service: NarrationService
 
   beforeEach(() => {
@@ -44,7 +59,8 @@ describe('NarrationService.generateBlock', () => {
     llm = {
       narrate: vi.fn(async () => ({ summary: 'Made one win, one loss.', assessment: 'Within risk limits.' })),
     } as unknown as NarrationLlmService
-    service = new NarrationService(trades, decisions, narrations, llm)
+    candles = { priceReturn: vi.fn(async () => 0) } as unknown as CandleRepository
+    service = new NarrationService(trades, decisions, narrations, llm, candles)
   })
 
   it('upserts a 6h narration with computed stats and LLM text', async () => {
@@ -59,7 +75,7 @@ describe('NarrationService.generateBlock', () => {
     expect(arg['periodEnd']).toEqual(periodEndOf('6h', periodStart))
     expect(arg['summary']).toBe('Made one win, one loss.')
     expect(arg['assessment']).toBe('Within risk limits.')
-    expect(arg['stats']).toEqual({ pnl: 6, trades: 2, wins: 1, losses: 1, winRate: 0.5 })
+    expect(arg['stats']).toMatchObject({ pnl: 6, trades: 2, wins: 1, losses: 1, winRate: 0.5, benchmarkReturn: 0 })
   })
 
   it('queries trades and decisions for the 6h window', async () => {
@@ -75,7 +91,7 @@ function childNarration(pnl: number): Narration {
     id: `c-${pnl}`, granularity: '6h',
     periodStart: new Date(), periodEnd: new Date(),
     summary: 's', assessment: null,
-    stats: { pnl, trades: 1, wins: pnl > 0 ? 1 : 0, losses: pnl < 0 ? 1 : 0, winRate: pnl > 0 ? 1 : 0 },
+    stats: { pnl, trades: 1, wins: pnl > 0 ? 1 : 0, losses: pnl < 0 ? 1 : 0, winRate: pnl > 0 ? 1 : 0, benchmarkReturn: 0, alpha: 0 },
     createdAt: new Date(),
   }
 }
@@ -85,6 +101,7 @@ describe('NarrationService.generateRollup', () => {
   let decisions: DecisionRepository
   let narrations: NarrationRepository
   let llm: NarrationLlmService
+  let candles: CandleRepository
   let service: NarrationService
 
   beforeEach(() => {
@@ -97,7 +114,8 @@ describe('NarrationService.generateRollup', () => {
     llm = {
       narrate: vi.fn(async () => ({ summary: 'A solid day overall.', assessment: 'Consistent.' })),
     } as unknown as NarrationLlmService
-    service = new NarrationService(trades, decisions, narrations, llm)
+    candles = { priceReturn: vi.fn(async () => 0) } as unknown as CandleRepository
+    service = new NarrationService(trades, decisions, narrations, llm, candles)
   })
 
   it('aggregates child stats into the roll-up narration', async () => {
@@ -105,7 +123,7 @@ describe('NarrationService.generateRollup', () => {
     const upsert = narrations.upsert as ReturnType<typeof vi.fn>
     const arg = upsert.mock.calls[0][0] as Record<string, unknown>
     expect(arg['granularity']).toBe('day')
-    expect(arg['stats']).toEqual({ pnl: 7, trades: 2, wins: 1, losses: 1, winRate: 0.5 })
+    expect(arg['stats']).toMatchObject({ pnl: 7, trades: 2, wins: 1, losses: 1, winRate: 0.5, benchmarkReturn: 0 })
     expect(arg['summary']).toBe('A solid day overall.')
   })
 

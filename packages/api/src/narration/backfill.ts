@@ -5,6 +5,7 @@ import type { PrismaService } from '../prisma/prisma.service'
 import { TradeRepository } from '../prisma/repositories/trade.repository'
 import { DecisionRepository } from '../prisma/repositories/decision.repository'
 import { NarrationRepository } from '../prisma/repositories/narration.repository'
+import { CandleRepository } from '../prisma/repositories/candle.repository'
 import { NarrationLlmService } from './narration-llm.service'
 import { NarrationService } from './narration.service'
 import {
@@ -23,6 +24,7 @@ const narration = new NarrationService(
   new DecisionRepository(prisma),
   new NarrationRepository(prisma),
   new NarrationLlmService(),
+  new CandleRepository(prisma),
 )
 
 async function main(): Promise<void> {

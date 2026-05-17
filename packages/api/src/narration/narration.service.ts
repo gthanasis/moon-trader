@@ -3,6 +3,7 @@ import type { NarrationGranularity } from '../common'
 import { TradeRepository } from '../prisma/repositories/trade.repository'
 import { DecisionRepository } from '../prisma/repositories/decision.repository'
 import { NarrationRepository } from '../prisma/repositories/narration.repository'
+import { CandleRepository } from '../prisma/repositories/candle.repository'
 import { NarrationLlmService } from './narration-llm.service'
 import { buildBlockPrompt, buildRollupPrompt } from './narration-prompt'
 import { computeStats, aggregateStats } from './narration-stats'
@@ -17,13 +18,26 @@ import { periodEndOf } from './narration-periods'
 @Injectable()
 export class NarrationService {
   private readonly logger = new Logger(NarrationService.name)
+  /** Capital base for the alpha calculation — the live bot's total capital. */
+  private readonly referenceCapital = Number(process.env['TOTAL_CAPITAL']) || 1000
 
   constructor(
     private readonly trades: TradeRepository,
     private readonly decisions: DecisionRepository,
     private readonly narrations: NarrationRepository,
     private readonly llm: NarrationLlmService,
+    private readonly candles: CandleRepository,
   ) {}
+
+  /** Buy-and-hold BTC return over a period — the narration benchmark. Fails open to 0. */
+  private async benchmark(from: Date, to: Date): Promise<number> {
+    try {
+      return (await this.candles.priceReturn('BTC/USDT', from, to)) ?? 0
+    } catch (err) {
+      this.logger.warn(`Benchmark return failed: ${String(err)}`)
+      return 0
+    }
+  }
 
   /** Generates the 6h narration block starting at `periodStart` (6h-aligned). */
   generateBlock(periodStart: Date): Promise<void> {
@@ -38,12 +52,13 @@ export class NarrationService {
   async generateFromRaw(granularity: NarrationGranularity, periodStart: Date): Promise<void> {
     const periodEnd = periodEndOf(granularity, periodStart)
 
-    const [trades, decisions] = await Promise.all([
+    const [trades, decisions, benchmarkReturn] = await Promise.all([
       this.trades.findClosedBetween(periodStart, periodEnd),
       this.decisions.findBetween(periodStart, periodEnd),
+      this.benchmark(periodStart, periodEnd),
     ])
 
-    const stats = computeStats(trades)
+    const stats = computeStats(trades, benchmarkReturn, this.referenceCapital)
 
     // Empty period — skip the LLM call entirely (keeps backfill cheap).
     if (trades.length === 0 && decisions.length === 0) {
@@ -92,7 +107,8 @@ export class NarrationService {
       return
     }
 
-    const stats = aggregateStats(children.map(c => c.stats))
+    const benchmarkReturn = await this.benchmark(periodStart, periodEnd)
+    const stats = aggregateStats(children.map(c => c.stats), benchmarkReturn, this.referenceCapital)
 
     // No trades across the whole period — canned summary, no LLM call.
     if (stats.trades === 0) {
