@@ -1,0 +1,979 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trader — Dashboard</title>
+<style>
+  /* ── Tokens ── */
+  :root {
+    --bg:       #09090f;
+    --surface:  #111118;
+    --surface2: #18181f;
+    --border:   #222230;
+    --fg:       #e4e4f0;
+    --muted:    #555570;
+    --accent:   #00e5a0;
+    --positive: #10c97a;
+    --negative: #f44;
+    --warn:     #f59e0b;
+    --font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+    --font-body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+    --radius: 6px;
+    --sidebar-w: 200px;
+  }
+
+  [data-theme="light"] {
+    --bg:       #f4f4f8;
+    --surface:  #ffffff;
+    --surface2: #f8f8fc;
+    --border:   #e0e0ec;
+    --fg:       #16161e;
+    --muted:    #8888a8;
+    --accent:   #0050e6;
+    --positive: #059669;
+    --negative: #dc2626;
+    --warn:     #d97706;
+  }
+
+  [data-theme="terminal"] {
+    --bg:       #000000;
+    --surface:  #0a0a0a;
+    --surface2: #111111;
+    --border:   #1a1a1a;
+    --fg:       #00ff9d;
+    --muted:    #2a6a4a;
+    --accent:   #00ff9d;
+    --positive: #00ff9d;
+    --negative: #ff3333;
+    --font-display: var(--font-mono);
+    --font-body: var(--font-mono);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-body);
+    background: var(--bg);
+    color: var(--fg);
+    display: flex;
+    min-height: 100vh;
+    font-size: 13px;
+    line-height: 1.5;
+    transition: background 0.25s, color 0.25s;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: var(--sidebar-w);
+    flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 20px 0;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 10;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+  }
+
+  .brand-icon {
+    width: 26px;
+    height: 26px;
+    background: var(--accent);
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-family: var(--font-mono);
+    font-weight: 700;
+    color: #000;
+    flex-shrink: 0;
+  }
+
+  .brand-name {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: -0.02em;
+  }
+
+  .nav-section {
+    padding: 0 8px;
+    flex: 1;
+  }
+
+  .nav-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 8px 8px 4px;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    border-radius: var(--radius);
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 13px;
+    transition: background 0.1s, color 0.1s;
+    margin-bottom: 1px;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+  }
+
+  .nav-item:hover { background: var(--surface2); color: var(--fg); }
+  .nav-item.active { background: color-mix(in oklch, var(--accent) 12%, transparent); color: var(--accent); }
+
+  .nav-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+  }
+
+  .status-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 16px;
+    margin-top: auto;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .pulse {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--positive);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ── Main ── */
+  .main {
+    margin-left: var(--sidebar-w);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  .topbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+  }
+
+  .page-title {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 16px;
+    letter-spacing: -0.02em;
+  }
+
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    font-weight: 500;
+  }
+
+  .badge-live { background: color-mix(in oklch, var(--positive) 15%, transparent); color: var(--positive); }
+  .badge-neutral { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+
+  .content {
+    padding: 28px;
+    flex: 1;
+  }
+
+  /* ── Stat cards ── */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    transition: border-color 0.2s;
+  }
+
+  .stat-card:hover { border-color: color-mix(in oklch, var(--accent) 40%, var(--border)); }
+
+  .stat-label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+    font-family: var(--font-mono);
+  }
+
+  .stat-value {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+  }
+
+  .stat-delta {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    margin-top: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .positive { color: var(--positive); }
+  .negative { color: var(--negative); }
+  .warning  { color: var(--warn); }
+
+  /* ── Section header ── */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .section-title {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: -0.01em;
+  }
+
+  .section-meta {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+  }
+
+  /* ── Table ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .card-title {
+    font-weight: 600;
+    font-size: 13px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  th {
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 10.5px;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+
+  th.r, td.r { text-align: right; }
+
+  td {
+    padding: 12px 14px;
+    border-bottom: 1px solid color-mix(in oklch, var(--border) 50%, transparent);
+    font-variant-numeric: tabular-nums;
+    vertical-align: top;
+  }
+
+  tr:last-child td { border-bottom: none; }
+
+  tr:hover td { background: var(--surface2); }
+
+  .coin-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    font-size: 12px;
+  }
+
+  .coin-icon {
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 700;
+  }
+
+  .coin-btc  { background: #f7931a22; color: #f7931a; }
+  .coin-eth  { background: #627eea22; color: #627eea; }
+  .coin-sol  { background: #9945ff22; color: #9945ff; }
+
+  .side-buy  { color: var(--positive); font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+  .side-sell { color: var(--negative); font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+
+  .reasoning-cell {
+    max-width: 280px;
+  }
+
+  .reasoning-text {
+    font-size: 11.5px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .confidence-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+  }
+
+  .conf-track {
+    height: 2px;
+    background: var(--border);
+    border-radius: 1px;
+    flex: 1;
+    max-width: 60px;
+    overflow: hidden;
+  }
+
+  .conf-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 1px;
+  }
+
+  .conf-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--accent);
+  }
+
+  .mono { font-family: var(--font-mono); }
+
+  /* ── Bottom grid ── */
+  .bottom-grid {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr;
+    gap: 16px;
+  }
+
+  /* ── Fear & Greed ── */
+  .fg-dial {
+    position: relative;
+    width: 120px;
+    height: 64px;
+    margin: 0 auto 8px;
+  }
+
+  .fg-value {
+    font-family: var(--font-mono);
+    font-size: 28px;
+    font-weight: 700;
+    text-align: center;
+    color: var(--warn);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .fg-label { text-align: center; font-size: 11px; color: var(--warn); margin-bottom: 4px; }
+  .fg-sub   { text-align: center; font-size: 10px; color: var(--muted); }
+
+  /* ── Signal feed ── */
+  .signal-item {
+    display: flex;
+    gap: 10px;
+    padding: 10px 0;
+    border-bottom: 1px solid color-mix(in oklch, var(--border) 40%, transparent);
+  }
+
+  .signal-item:last-child { border-bottom: none; }
+
+  .signal-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    margin-top: 4px;
+    flex-shrink: 0;
+  }
+
+  .signal-body { flex: 1; min-width: 0; }
+  .signal-source { font-size: 10px; font-family: var(--font-mono); color: var(--muted); margin-bottom: 2px; }
+  .signal-text { font-size: 11.5px; line-height: 1.4; }
+  .signal-time { font-size: 10px; font-family: var(--font-mono); color: var(--muted); margin-top: 2px; }
+
+  /* ── Tweaks panel ── */
+  .tweaks {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    z-index: 100;
+    min-width: 180px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+
+  .tweaks-title {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 10px;
+  }
+
+  .tweaks-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .tweaks-label {
+    font-size: 10px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+  }
+
+  .theme-btns {
+    display: flex;
+    gap: 4px;
+  }
+
+  .theme-btn {
+    flex: 1;
+    padding: 5px 4px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--fg);
+    font-size: 10px;
+    font-family: var(--font-mono);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .theme-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .theme-btn.active { background: color-mix(in oklch, var(--accent) 15%, transparent); border-color: var(--accent); color: var(--accent); }
+
+  .tweaks-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .toggle-track {
+    width: 28px; height: 15px;
+    border-radius: 8px;
+    background: var(--border);
+    cursor: pointer;
+    position: relative;
+    transition: background 0.2s;
+  }
+
+  .toggle-track.on { background: var(--accent); }
+
+  .toggle-thumb {
+    width: 11px; height: 11px;
+    border-radius: 50%;
+    background: #fff;
+    position: absolute;
+    top: 2px; left: 2px;
+    transition: left 0.2s;
+  }
+
+  .toggle-track.on .toggle-thumb { left: 15px; }
+
+  /* ── Apex chart-like sparkline ── */
+  .sparkline { display: block; }
+
+  /* ── Decision panel ── */
+  .decision-panel {
+    background: color-mix(in oklch, var(--accent) 6%, var(--surface2));
+    border: 1px solid color-mix(in oklch, var(--accent) 25%, var(--border));
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin-bottom: 16px;
+  }
+
+  .decision-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .decision-tag {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--accent);
+    background: color-mix(in oklch, var(--accent) 12%, transparent);
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+
+  .decision-title {
+    font-weight: 600;
+    font-size: 13px;
+    flex: 1;
+  }
+
+  .decision-time {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .decision-text {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .decision-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .btn {
+    padding: 6px 14px;
+    border-radius: 4px;
+    border: none;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: var(--font-body);
+    transition: opacity 0.15s;
+  }
+
+  .btn:hover { opacity: 0.85; }
+  .btn-primary { background: var(--accent); color: #000; font-weight: 600; }
+  .btn-ghost { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+
+  /* ── Mini P&L chart ── */
+  .chart-area {
+    padding: 12px 16px 16px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="brand">
+    <div class="brand-icon">T</div>
+    <span class="brand-name">Trader</span>
+  </div>
+
+  <nav class="nav-section">
+    <div class="nav-label">Views</div>
+    <button class="nav-item active" onclick="setView(this, 'overview')">
+      <span class="nav-dot"></span> Overview
+    </button>
+    <button class="nav-item" onclick="setView(this, 'positions')">
+      <span class="nav-dot"></span> Positions
+    </button>
+    <button class="nav-item" onclick="setView(this, 'trades')">
+      <span class="nav-dot"></span> Trade History
+    </button>
+    <button class="nav-item" onclick="setView(this, 'backtest')">
+      <span class="nav-dot"></span> Backtest
+    </button>
+
+    <div class="nav-label" style="margin-top: 12px">System</div>
+    <button class="nav-item">
+      <span class="nav-dot"></span> LLM Decisions
+    </button>
+    <button class="nav-item">
+      <span class="nav-dot"></span> Data Sources
+    </button>
+    <button class="nav-item">
+      <span class="nav-dot"></span> Config
+    </button>
+  </nav>
+
+  <div class="status-badge">
+    <div class="pulse"></div>
+    Live · 15m cycle
+  </div>
+</aside>
+
+<!-- Main content -->
+<div class="main">
+  <header class="topbar">
+    <div class="page-title" id="page-title">Overview</div>
+    <div class="topbar-right">
+      <span class="badge badge-neutral mono">Next cycle 08:47</span>
+      <span class="badge badge-live">
+        <div class="pulse" style="width:5px;height:5px;flex-shrink:0"></div>
+        Live
+      </span>
+    </div>
+  </header>
+
+  <div class="content">
+
+    <!-- Pending approval banner -->
+    <div class="decision-panel">
+      <div class="decision-header">
+        <span class="decision-tag">APPROVAL NEEDED</span>
+        <span class="decision-title">BUY $200 ETH/USDT — confidence 0.84</span>
+        <span class="decision-time">2 min ago</span>
+      </div>
+      <p class="decision-text">Strong on-chain inflow detected via Glassnode (exchange reserves dropped 3.2% in 6h). Positive macro sentiment following Fed pause narrative. ETH 4h RSI holding above 55. Fear & Greed shifted from 38 → 52 in past 12h. Stop-loss at $3,140, take-profit at $3,420.</p>
+      <div class="decision-actions">
+        <button class="btn btn-primary">✓ Approve</button>
+        <button class="btn btn-ghost">✕ Reject</button>
+        <span style="margin-left:auto;font-size:11px;color:var(--muted);align-self:center;font-family:var(--font-mono)">Auto-cancel in 8:04</span>
+      </div>
+    </div>
+
+    <!-- Stat cards -->
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total P&amp;L</div>
+        <div class="stat-value positive">+$1,842.50</div>
+        <div class="stat-delta positive">+12.28% since inception</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Capital Deployed</div>
+        <div class="stat-value">$3,240.00</div>
+        <div class="stat-delta" style="color:var(--muted)">64.8% of $5,000 cap</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Open Positions</div>
+        <div class="stat-value">3</div>
+        <div class="stat-delta positive">+$187.40 unrealized</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Fear &amp; Greed</div>
+        <div class="stat-value warning">52</div>
+        <div class="stat-delta warning">Neutral · ↑ from 38</div>
+      </div>
+    </div>
+
+    <!-- Open positions table -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Open Positions</span>
+        <span class="section-meta">3 active · auto-refresh 30s</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Coin</th>
+            <th>Side</th>
+            <th class="r">Entry</th>
+            <th class="r">Current</th>
+            <th class="r">Unrealized P&amp;L</th>
+            <th class="r">Stop / TP</th>
+            <th>LLM Reasoning</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div class="coin-badge">
+                <div class="coin-icon coin-btc">₿</div>
+                BTC/USDT
+              </div>
+            </td>
+            <td><span class="side-buy">BUY</span></td>
+            <td class="r mono">$61,240</td>
+            <td class="r mono">$62,810</td>
+            <td class="r positive mono">+$157.00<br><span style="font-size:10px;color:var(--positive)">+2.56%</span></td>
+            <td class="r mono" style="font-size:11px;color:var(--muted)">$59,800<br>$65,000</td>
+            <td class="reasoning-cell">
+              <div class="reasoning-text">Whale accumulation signal from CryptoQuant (net exchange outflow +8,200 BTC in 24h). Bullish divergence on 4h MACD. Low news risk.</div>
+              <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:79%"></div></div>
+                <span class="conf-label">0.79</span>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div class="coin-badge">
+                <div class="coin-icon coin-eth">Ξ</div>
+                ETH/USDT
+              </div>
+            </td>
+            <td><span class="side-buy">BUY</span></td>
+            <td class="r mono">$3,280</td>
+            <td class="r mono">$3,296</td>
+            <td class="r positive mono">+$28.80<br><span style="font-size:10px;color:var(--positive)">+0.49%</span></td>
+            <td class="r mono" style="font-size:11px;color:var(--muted)">$3,140<br>$3,520</td>
+            <td class="reasoning-cell">
+              <div class="reasoning-text">ETF inflows resumed. Staking yield compression reducing sell pressure. Reddit sentiment shifted positive past 6h.</div>
+              <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:71%"></div></div>
+                <span class="conf-label">0.71</span>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div class="coin-badge">
+                <div class="coin-icon coin-sol">◎</div>
+                SOL/USDT
+              </div>
+            </td>
+            <td><span class="side-sell">SELL</span></td>
+            <td class="r mono">$148.20</td>
+            <td class="r mono">$146.60</td>
+            <td class="r positive mono">+$1.60<br><span style="font-size:10px;color:var(--positive)">+1.08%</span></td>
+            <td class="r mono" style="font-size:11px;color:var(--muted)">$152.00<br>$139.00</td>
+            <td class="reasoning-cell">
+              <div class="reasoning-text">Negative CryptoPanic news cluster: 3 articles re: validator outage. On-chain DEX volume declining. Confidence low but signal clear.</div>
+              <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:61%"></div></div>
+                <span class="conf-label">0.61</span>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Bottom grid -->
+    <div class="bottom-grid">
+
+      <!-- Recent trades -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Recent Trades</span>
+          <span class="section-meta">Closed · last 48h</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Coin</th>
+              <th>Side</th>
+              <th class="r">P&amp;L</th>
+              <th class="r">Duration</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="mono">BTC/USDT</td>
+              <td><span class="side-buy">BUY</span></td>
+              <td class="r positive mono">+$312.40</td>
+              <td class="r mono" style="color:var(--muted)">4h 22m</td>
+            </tr>
+            <tr>
+              <td class="mono">DOGE/USDT</td>
+              <td><span class="side-buy">BUY</span></td>
+              <td class="r negative mono">−$44.10</td>
+              <td class="r mono" style="color:var(--muted)">1h 08m</td>
+            </tr>
+            <tr>
+              <td class="mono">ETH/USDT</td>
+              <td><span class="side-sell">SELL</span></td>
+              <td class="r positive mono">+$88.00</td>
+              <td class="r mono" style="color:var(--muted)">2h 45m</td>
+            </tr>
+            <tr>
+              <td class="mono">BNB/USDT</td>
+              <td><span class="side-buy">BUY</span></td>
+              <td class="r positive mono">+$22.60</td>
+              <td class="r mono" style="color:var(--muted)">6h 11m</td>
+            </tr>
+            <tr>
+              <td class="mono">SOL/USDT</td>
+              <td><span class="side-buy">BUY</span></td>
+              <td class="r negative mono">−$91.30</td>
+              <td class="r mono" style="color:var(--muted)">0h 52m</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Signal feed -->
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Signal Feed</span>
+          <span class="section-meta">Live sources</span>
+        </div>
+        <div style="padding: 4px 14px 12px">
+          <div class="signal-item">
+            <div class="signal-dot" style="background:var(--negative)"></div>
+            <div class="signal-body">
+              <div class="signal-source">CRYPTOPANIC · NEWS</div>
+              <div class="signal-text">SEC reportedly probing 3 major exchanges over custody rules</div>
+              <div class="signal-time">3 min ago · [btc, eth]</div>
+            </div>
+          </div>
+          <div class="signal-item">
+            <div class="signal-dot" style="background:var(--positive)"></div>
+            <div class="signal-body">
+              <div class="signal-source">ALTERNATIVE.ME · SENTIMENT</div>
+              <div class="signal-text">Fear &amp; Greed Index up 14 points to 52 — Neutral</div>
+              <div class="signal-time">15 min ago · [all]</div>
+            </div>
+          </div>
+          <div class="signal-item">
+            <div class="signal-dot" style="background:var(--positive)"></div>
+            <div class="signal-body">
+              <div class="signal-source">GLASSNODE · ON-CHAIN</div>
+              <div class="signal-text">BTC exchange reserves fell to 3-month low (2.04M BTC)</div>
+              <div class="signal-time">28 min ago · [btc]</div>
+            </div>
+          </div>
+          <div class="signal-item">
+            <div class="signal-dot" style="background:var(--muted)"></div>
+            <div class="signal-body">
+              <div class="signal-source">NEWSAPI · MACRO</div>
+              <div class="signal-text">Fed minutes: members open to June pause as inflation cools</div>
+              <div class="signal-time">1h 12min ago · [macro]</div>
+            </div>
+          </div>
+          <div class="signal-item">
+            <div class="signal-dot" style="background:var(--negative)"></div>
+            <div class="signal-body">
+              <div class="signal-source">REDDIT · SOCIAL</div>
+              <div class="signal-text">r/CryptoCurrency sentiment negative (−0.42 score, 2,100 posts)</div>
+              <div class="signal-time">42 min ago · [all]</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<!-- P&L sparkline SVG in stat card (visual only, painted in JS) -->
+
+<!-- Tweaks panel -->
+<div class="tweaks">
+  <div class="tweaks-title">Aesthetic Direction</div>
+  <div class="tweaks-row">
+    <div class="tweaks-label">Theme</div>
+    <div class="theme-btns">
+      <button class="theme-btn active" onclick="setTheme('dark', this)">Dark</button>
+      <button class="theme-btn" onclick="setTheme('light', this)">Light</button>
+      <button class="theme-btn" onclick="setTheme('terminal', this)">Term.</button>
+    </div>
+  </div>
+  <div class="tweaks-row">
+    <div class="tweaks-toggle">
+      <span class="tweaks-label">Show reasoning</span>
+      <div class="toggle-track on" id="toggle-reasoning" onclick="this.classList.toggle('on'); toggleReasoning()">
+        <div class="toggle-thumb"></div>
+      </div>
+    </div>
+  </div>
+  <div class="tweaks-row">
+    <div class="tweaks-toggle">
+      <span class="tweaks-label">Compact density</span>
+      <div class="toggle-track" id="toggle-compact" onclick="this.classList.toggle('on'); toggleCompact()">
+        <div class="toggle-thumb"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function setTheme(t, btn) {
+    document.body.removeAttribute('data-theme');
+    if (t === 'light') document.body.setAttribute('data-theme', 'light');
+    if (t === 'terminal') document.body.setAttribute('data-theme', 'terminal');
+    document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  }
+
+  function setView(btn, view) {
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const titles = { overview: 'Overview', positions: 'Open Positions', trades: 'Trade History', backtest: 'Backtest' };
+    document.getElementById('page-title').textContent = titles[view] || view;
+  }
+
+  function toggleReasoning() {
+    const cells = document.querySelectorAll('.reasoning-cell');
+    const visible = document.getElementById('toggle-reasoning').classList.contains('on');
+    cells.forEach(c => c.style.display = visible ? '' : 'none');
+  }
+
+  function toggleCompact() {
+    const compact = document.getElementById('toggle-compact').classList.contains('on');
+    document.querySelectorAll('td, th').forEach(el => {
+      el.style.padding = compact ? '6px 14px' : '';
+    });
+    document.querySelectorAll('.stat-value').forEach(el => {
+      el.style.fontSize = compact ? '16px' : '';
+    });
+  }
+</script>
+
+</body>
+</html>

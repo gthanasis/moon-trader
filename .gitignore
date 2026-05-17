@@ -13,3 +13,5 @@ build/
 .turbo/
 .next/
 .trader.pid
+.claude/
+.playwright-mcp/

@@ -1,0 +1,1148 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Trader — Dashboard</title>
+<style>
+/* ══ TOKENS ══ */
+:root {
+  --bg:      #09090f;
+  --surface: #111118;
+  --sf2:     #18181f;
+  --border:  #1e1e2c;
+  --fg:      #ddddf0;
+  --muted:   #50506a;
+  --accent:  #00e5a0;
+  --pos:     #10c97a;
+  --neg:     #f05050;
+  --warn:    #e8a020;
+  --info:    #6090f0;
+  --fd: -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
+  --fb: -apple-system, BlinkMacSystemFont, 'SF Pro Text',    system-ui, sans-serif;
+  --fm: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  --r: 5px;
+  --sw: 184px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--fb);
+  background: var(--bg);
+  color: var(--fg);
+  display: flex;
+  min-height: 100vh;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* ══ MODE SWITCHING ══ */
+/* Expert = default; .nb hidden. In noob mode, .xp hidden, .nb shown */
+.nb { display: none; }
+body.noob .xp { display: none; }
+body.noob .nb { display: revert; }
+
+/* ══ SIDEBAR ══ */
+.sidebar {
+  width: var(--sw); flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  padding: 14px 0;
+  position: fixed; top: 0; left: 0;
+  height: 100vh; z-index: 10;
+}
+
+.brand {
+  display: flex; align-items: center; gap: 7px;
+  padding: 0 12px 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+
+.brand-icon {
+  width: 22px; height: 22px;
+  background: var(--accent); border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-family: var(--fm); font-weight: 700; color: #000;
+}
+
+.brand-name { font-family: var(--fd); font-weight: 600; font-size: 14px; letter-spacing: -0.02em; }
+
+.nav-section { padding: 0 6px; flex: 1; }
+
+.nav-label {
+  font-size: 9.5px; font-weight: 600; letter-spacing: 0.09em;
+  text-transform: uppercase; color: var(--muted);
+  padding: 8px 6px 3px;
+}
+
+.nav-item {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 8px; border-radius: var(--r);
+  color: var(--muted); cursor: pointer; font-size: 12px;
+  transition: background 0.1s, color 0.1s;
+  margin-bottom: 1px;
+  border: none; background: none; width: 100%; text-align: left; font-family: var(--fb);
+}
+
+.nav-item:hover { background: var(--sf2); color: var(--fg); }
+.nav-item.active { background: color-mix(in oklch, var(--accent) 10%, transparent); color: var(--accent); }
+.nav-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+
+.status-badge {
+  display: flex; align-items: center; gap: 5px;
+  padding: 10px 14px; border-top: 1px solid var(--border);
+  font-size: 10.5px; color: var(--muted); font-family: var(--fm);
+}
+
+.pulse {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--pos);
+  animation: blink 2.2s ease-in-out infinite; flex-shrink: 0;
+}
+
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+/* ══ MAIN ══ */
+.main { margin-left: var(--sw); flex: 1; display: flex; flex-direction: column; }
+
+.topbar {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 9px 20px;
+  display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 5;
+}
+
+.page-title { font-family: var(--fd); font-weight: 600; font-size: 14px; letter-spacing: -0.02em; }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 7px; border-radius: 3px;
+  font-size: 10.5px; font-family: var(--fm); font-weight: 500;
+}
+
+.pill-live    { background: color-mix(in oklch, var(--pos) 12%, transparent); color: var(--pos); }
+.pill-neutral { background: var(--sf2); color: var(--muted); border: 1px solid var(--border); }
+
+/* ══ MODE TOGGLE ══ */
+.mode-toggle {
+  display: flex;
+  background: var(--sf2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.mode-btn {
+  padding: 4px 10px;
+  font-size: 10.5px;
+  font-family: var(--fm);
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: var(--muted);
+  transition: background 0.15s, color 0.15s;
+  line-height: 1;
+}
+
+.mode-btn.active {
+  background: var(--surface);
+  color: var(--fg);
+}
+
+body.noob .mode-btn[data-mode="noob"]   { background: color-mix(in oklch, var(--accent) 12%, var(--sf2)); color: var(--accent); }
+body.noob .mode-btn[data-mode="expert"] { background: none; color: var(--muted); }
+body:not(.noob) .mode-btn[data-mode="expert"] { background: var(--surface); color: var(--fg); }
+body:not(.noob) .mode-btn[data-mode="noob"]   { background: none; color: var(--muted); }
+
+/* ══ NOOB MODE — visual softening ══ */
+body.noob .card-meta { display: none; }
+body.noob .banner-tag { letter-spacing: 0; text-transform: none; font-size: 10px; }
+body.noob .sig-source { font-family: var(--fb); }
+body.noob .stat-label { font-family: var(--fb); text-transform: none; letter-spacing: 0; }
+body.noob .results-label { display: none; }
+body.noob .chart-title { font-family: var(--fb); }
+
+.content { padding: 18px 20px; flex: 1; }
+
+/* ══ APPROVAL BANNER ══ */
+.banner {
+  background: color-mix(in oklch, var(--warn) 6%, var(--surface));
+  border: 1px solid color-mix(in oklch, var(--warn) 28%, var(--border));
+  border-radius: var(--r); padding: 11px 13px; margin-bottom: 14px;
+}
+
+.banner-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+
+.banner-tag {
+  font-family: var(--fm); font-size: 9.5px; font-weight: 700; letter-spacing: 0.07em;
+  color: var(--warn); background: color-mix(in oklch, var(--warn) 12%, transparent);
+  padding: 2px 6px; border-radius: 3px; flex-shrink: 0;
+}
+
+.banner-title { font-weight: 600; font-size: 12.5px; flex: 1; }
+.banner-time  { font-family: var(--fm); font-size: 10px; color: var(--muted); }
+
+.banner-meta {
+  display: flex; gap: 14px; margin-bottom: 8px;
+  font-family: var(--fm); font-size: 10.5px; flex-wrap: wrap;
+}
+
+.bm-item { color: var(--muted); }
+.bm-item b { color: var(--fg); font-weight: 500; margin-left: 3px; }
+
+.banner-reasoning { font-size: 11.5px; color: var(--muted); line-height: 1.6; margin-bottom: 9px; }
+
+.banner-actions { display: flex; align-items: center; gap: 8px; }
+
+.btn {
+  padding: 5px 12px; border-radius: var(--r); border: none;
+  font-size: 11.5px; font-weight: 500; cursor: pointer; font-family: var(--fb);
+  transition: opacity 0.15s;
+}
+.btn:hover { opacity: 0.8; }
+.btn-approve { background: var(--pos);    color: #000; font-weight: 600; }
+.btn-reject  { background: var(--sf2);   color: var(--muted); border: 1px solid var(--border); }
+.btn-run     { background: var(--accent); color: #000; font-weight: 600; width: 100%; margin-top: 4px; }
+.countdown   { margin-left: auto; font-family: var(--fm); font-size: 10px; color: var(--muted); }
+
+/* ══ STAT GRID ══ */
+.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+
+.stat-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 11px 13px;
+}
+
+.stat-label {
+  font-size: 10px; color: var(--muted); text-transform: uppercase;
+  letter-spacing: 0.07em; margin-bottom: 5px; font-family: var(--fm);
+}
+
+.stat-value {
+  font-family: var(--fm); font-size: 20px; font-weight: 600;
+  letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1;
+}
+
+.stat-sub { font-family: var(--fm); font-size: 10px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+body.noob .stat-sub { font-family: var(--fb); }
+
+.c-pos  { color: var(--pos); }
+.c-neg  { color: var(--neg); }
+.c-warn { color: var(--warn); }
+.c-info { color: var(--info); }
+.c-mut  { color: var(--muted); }
+
+/* ══ LAYOUTS ══ */
+.two-col { display: grid; grid-template-columns: 1.6fr 1fr; gap: 14px; }
+
+/* ══ CARD ══ */
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); overflow: hidden;
+}
+
+.card-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 11px; border-bottom: 1px solid var(--border);
+}
+
+.card-title { font-weight: 600; font-size: 12px; }
+.card-meta  { font-size: 10px; color: var(--muted); font-family: var(--fm); }
+
+/* ══ TABLE ══ */
+table { width: 100%; border-collapse: collapse; }
+
+th {
+  text-align: left; padding: 6px 10px;
+  font-size: 9.5px; font-family: var(--fm); font-weight: 500;
+  letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--muted); border-bottom: 1px solid var(--border);
+}
+
+body.noob th { font-family: var(--fb); text-transform: none; letter-spacing: 0; }
+
+th.r, td.r { text-align: right; }
+
+td {
+  padding: 7px 10px;
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 60%, transparent);
+  font-variant-numeric: tabular-nums; vertical-align: top;
+}
+
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--sf2); }
+
+.mono { font-family: var(--fm); }
+
+.coin-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--fm); font-weight: 600; font-size: 11.5px;
+}
+
+.coin-icon {
+  width: 18px; height: 18px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8.5px; font-weight: 700;
+}
+
+.ci-btc  { background: #f7931a18; color: #f7931a; }
+.ci-eth  { background: #627eea18; color: #627eea; }
+.ci-sol  { background: #9945ff18; color: #9945ff; }
+.ci-bnb  { background: #f0b90b18; color: #f0b90b; }
+.ci-doge { background: #c2a63318; color: #c2a633; }
+
+.side-buy  { color: var(--pos); font-family: var(--fm); font-size: 10px; font-weight: 700; }
+.side-sell { color: var(--neg); font-family: var(--fm); font-size: 10px; font-weight: 700; }
+
+.reasoning-cell { max-width: 260px; }
+
+.rt {
+  font-size: 11px; color: var(--muted); line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical; overflow: hidden;
+  cursor: pointer;
+}
+
+.rt.expanded { -webkit-line-clamp: unset; display: block; }
+.rt::after { content: ' ↓'; font-size: 9px; color: var(--border); }
+.rt.expanded::after { content: ' ↑'; }
+
+/* In noob mode, reasoning text is a touch larger and uses body font */
+body.noob .rt { font-family: var(--fb); font-size: 11.5px; }
+
+/* ══ SIGNAL FEED ══ */
+.signal-list { padding: 4px 10px 10px; }
+
+.signal-item {
+  display: flex; gap: 7px; padding: 7px 0;
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 40%, transparent);
+}
+
+.signal-item:last-child { border-bottom: none; }
+
+.sig-dot { width: 5px; height: 5px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+.sig-body { flex: 1; min-width: 0; }
+.sig-source { font-size: 9.5px; font-family: var(--fm); color: var(--muted); margin-bottom: 2px; }
+.sig-text   { font-size: 11px; line-height: 1.4; }
+.sig-time   { font-size: 9.5px; font-family: var(--fm); color: var(--muted); margin-top: 2px; }
+
+.t-news      { background: var(--neg); }
+.t-sentiment { background: var(--warn); }
+.t-onchain   { background: var(--pos); }
+.t-macro     { background: var(--info); }
+
+/* ══ PAGINATION ══ */
+.pagination {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 11px; border-top: 1px solid var(--border);
+}
+
+.pag-info { font-size: 10.5px; color: var(--muted); font-family: var(--fm); }
+.pag-btns { display: flex; gap: 4px; }
+
+.pag-btn {
+  padding: 4px 10px; border-radius: var(--r); border: 1px solid var(--border);
+  background: var(--sf2); color: var(--muted); font-size: 11px;
+  cursor: pointer; font-family: var(--fb); transition: color 0.1s;
+}
+
+.pag-btn:hover:not(:disabled) { color: var(--fg); }
+.pag-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ══ BACKTEST FORM ══ */
+.form-group { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; }
+
+.form-label { font-size: 10.5px; color: var(--muted); font-family: var(--fm); letter-spacing: 0.04em; }
+body.noob .form-label { font-family: var(--fb); letter-spacing: 0; }
+
+.form-input {
+  background: var(--sf2); border: 1px solid var(--border);
+  color: var(--fg); border-radius: var(--r);
+  padding: 6px 10px; font-size: 12px; font-family: var(--fb);
+  outline: none; transition: border-color 0.15s; width: 100%;
+  -webkit-appearance: none; appearance: none;
+}
+
+.form-input:focus { border-color: color-mix(in oklch, var(--accent) 50%, var(--border)); }
+
+/* ══ BACKTEST RESULTS ══ */
+.stat-grid-6 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+
+.results-label {
+  font-size: 9.5px; color: var(--muted); font-family: var(--fm);
+  text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 10px;
+}
+
+/* ══ CHART ══ */
+.chart-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 11px 13px; }
+.chart-title { font-size: 10px; color: var(--muted); font-family: var(--fm); margin-bottom: 10px; }
+.chart-svg   { width: 100%; height: auto; display: block; }
+
+/* ══ RUNNING STATE ══ */
+.running-state {
+  display: flex; align-items: center; gap: 10px;
+  padding: 28px 0; color: var(--muted); font-family: var(--fm); font-size: 11.5px;
+}
+
+.spinner {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite; flex-shrink: 0;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ══ SCREEN VISIBILITY ══ */
+.screen { display: none; }
+.screen.active { display: block; }
+
+/* ══ NOOB — confidence badge ══ */
+.conf-wrap { display: flex; align-items: center; gap: 5px; margin-top: 4px; }
+.conf-track { height: 2px; background: var(--border); border-radius: 1px; flex: 1; max-width: 60px; overflow: hidden; }
+.conf-fill  { height: 100%; background: var(--accent); border-radius: 1px; }
+.conf-pct   { font-family: var(--fm); font-size: 10px; color: var(--accent); }
+body.noob .conf-pct::after { content: ' sure'; font-size: 9px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- ════ SIDEBAR ════ -->
+<aside class="sidebar">
+  <div class="brand">
+    <div class="brand-icon">T</div>
+    <span class="brand-name">Trader</span>
+  </div>
+
+  <nav class="nav-section">
+    <div class="nav-label">Dashboard</div>
+    <button class="nav-item active" onclick="go('overview',this)" data-title="Overview">
+      <span class="nav-dot"></span>
+      <span class="xp">Overview</span>
+      <span class="nb">Home</span>
+    </button>
+    <button class="nav-item" onclick="go('positions',this)" data-title="Open Positions">
+      <span class="nav-dot"></span>
+      <span class="xp">Open Positions</span>
+      <span class="nb">Active Trades</span>
+    </button>
+    <button class="nav-item" onclick="go('trades',this)" data-title="Trade History">
+      <span class="nav-dot"></span>
+      Trade History
+    </button>
+    <button class="nav-item" onclick="go('backtest',this)" data-title="Backtest">
+      <span class="nav-dot"></span>
+      <span class="xp">Backtest</span>
+      <span class="nb">Test the AI</span>
+    </button>
+  </nav>
+
+  <div class="status-badge">
+    <div class="pulse"></div>
+    <span class="xp">Live · 15m cycle</span>
+    <span class="nb">Live · checks every 15 min</span>
+  </div>
+</aside>
+
+<!-- ════ MAIN ════ -->
+<div class="main">
+  <header class="topbar">
+    <div class="page-title" id="page-title">Overview</div>
+    <div class="topbar-right">
+      <!-- Mode toggle -->
+      <div class="mode-toggle">
+        <button class="mode-btn" data-mode="expert" onclick="setMode('expert')">Expert</button>
+        <button class="mode-btn" data-mode="noob"   onclick="setMode('noob')">Simple</button>
+      </div>
+      <span class="pill pill-neutral" id="cycle-clock">Next cycle 00:00</span>
+      <span class="pill pill-live">
+        <div class="pulse" style="width:5px;height:5px;flex-shrink:0"></div>
+        Live
+      </span>
+    </div>
+  </header>
+
+  <div class="content">
+
+    <!-- ════ OVERVIEW ════ -->
+    <div class="screen active" id="screen-overview">
+
+      <!-- LLMDecision awaiting approval -->
+      <div class="banner" id="approval-banner">
+        <div class="banner-head">
+          <span class="banner-tag">
+            <span class="xp">APPROVAL NEEDED</span>
+            <span class="nb">Your decision needed</span>
+          </span>
+          <span class="banner-title">
+            <span class="xp">BUY $200 ETH/USDT &mdash; confidence 0.84</span>
+            <span class="nb">Buy $200 of Ethereum &mdash; the AI is 84% confident</span>
+          </span>
+          <span class="banner-time">2 min ago</span>
+        </div>
+
+        <!-- Expert meta row -->
+        <div class="banner-meta xp">
+          <div class="bm-item">action<b>buy</b></div>
+          <div class="bm-item">coin<b>ETH/USDT</b></div>
+          <div class="bm-item">size<b>$200.00</b></div>
+          <div class="bm-item">confidence<b>0.84</b></div>
+          <div class="bm-item">stopLoss<b>$3,140</b></div>
+          <div class="bm-item">takeProfit<b>$3,420</b></div>
+        </div>
+
+        <!-- Noob meta row -->
+        <div class="banner-meta nb" style="font-family: var(--fb);">
+          <div class="bm-item">What<b>Buy Ethereum</b></div>
+          <div class="bm-item">How much<b>$200</b></div>
+          <div class="bm-item">Sell if it drops to<b>$3,140</b></div>
+          <div class="bm-item">Sell if it rises to<b>$3,420</b></div>
+          <div class="bm-item">Potential profit<b>up to $28</b></div>
+          <div class="bm-item">Max loss<b>up to $14</b></div>
+        </div>
+
+        <!-- Expert reasoning -->
+        <p class="banner-reasoning xp">Strong on-chain inflow detected via Glassnode (exchange reserves −3.2% in 6h). Positive macro sentiment following Fed pause narrative. ETH 4h RSI holding above 55. Fear &amp; Greed shifted 38 → 52 in past 12h. Risk/reward on stop/TP: 1.89.</p>
+
+        <!-- Noob reasoning -->
+        <p class="banner-reasoning nb">Less Ethereum is sitting on exchanges right now — that usually means big investors are holding rather than selling. People are generally feeling more confident about the market today, and there's been good news about interest rates. The AI thinks the risk vs reward here is solid: if this goes wrong you lose up to $14; if it goes right you could make up to $28.</p>
+
+        <div class="banner-actions">
+          <button class="btn btn-approve" onclick="document.getElementById('approval-banner').remove()">✓ Approve</button>
+          <button class="btn btn-reject"  onclick="document.getElementById('approval-banner').remove()">✕ Reject</button>
+          <span class="countdown" id="countdown">
+            <span class="xp">Auto-cancel in 8:04</span>
+            <span class="nb">Will expire in 8:04</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- Stat cards -->
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-label">
+            <span class="xp">Total P&amp;L</span>
+            <span class="nb">Total Profit / Loss</span>
+          </div>
+          <div class="stat-value c-pos">+$1,842.50</div>
+          <div class="stat-sub c-pos">
+            <span class="xp">+12.28% since inception</span>
+            <span class="nb">Up 12% since you started</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">
+            <span class="xp">Capital Deployed</span>
+            <span class="nb">Money in the Market</span>
+          </div>
+          <div class="stat-value">$2,600.00</div>
+          <div class="stat-sub c-mut">
+            <span class="xp">sum of open Trade.size</span>
+            <span class="nb">currently tied up in trades</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">
+            <span class="xp">Open Positions</span>
+            <span class="nb">Active Trades</span>
+          </div>
+          <div class="stat-value">3</div>
+          <div class="stat-sub c-pos">
+            <span class="xp">+$187.40 unrealized</span>
+            <span class="nb">+$187 on paper right now</span>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">
+            <span class="xp">Fear &amp; Greed</span>
+            <span class="nb">Market Mood Score</span>
+          </div>
+          <div class="stat-value c-warn">52</div>
+          <div class="stat-sub c-warn">
+            <span class="xp">Neutral · ↑ from 38</span>
+            <span class="nb">Neutral (50 = calm) · improving</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <!-- Recent trades -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Recent Trades</span>
+            <span class="card-meta">findRecentTrades(100) · 48h</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Coin</th>
+                <th>
+                  <span class="xp">Side</span>
+                  <span class="nb">Direction</span>
+                </th>
+                <th class="r">
+                  <span class="xp">P&amp;L</span>
+                  <span class="nb">Profit / Loss</span>
+                </th>
+                <th class="r">
+                  <span class="xp">Duration</span>
+                  <span class="nb">How long</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><div class="coin-badge"><div class="coin-icon ci-btc">₿</div>BTC/USDT</div></td>
+                <td><span class="side-buy">BUY</span></td>
+                <td class="r mono c-pos">+$312.40</td>
+                <td class="r mono c-mut">4h 22m</td>
+              </tr>
+              <tr>
+                <td><div class="coin-badge"><div class="coin-icon ci-doge">D</div>DOGE/USDT</div></td>
+                <td><span class="side-buy">BUY</span></td>
+                <td class="r mono c-neg">−$44.10</td>
+                <td class="r mono c-mut">1h 08m</td>
+              </tr>
+              <tr>
+                <td><div class="coin-badge"><div class="coin-icon ci-eth">Ξ</div>ETH/USDT</div></td>
+                <td><span class="side-sell">SELL</span></td>
+                <td class="r mono c-pos">+$88.00</td>
+                <td class="r mono c-mut">2h 45m</td>
+              </tr>
+              <tr>
+                <td><div class="coin-badge"><div class="coin-icon ci-bnb">B</div>BNB/USDT</div></td>
+                <td><span class="side-buy">BUY</span></td>
+                <td class="r mono c-pos">+$22.60</td>
+                <td class="r mono c-mut">6h 11m</td>
+              </tr>
+              <tr>
+                <td><div class="coin-badge"><div class="coin-icon ci-sol">◎</div>SOL/USDT</div></td>
+                <td><span class="side-buy">BUY</span></td>
+                <td class="r mono c-neg">−$91.30</td>
+                <td class="r mono c-mut">0h 52m</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Signal feed -->
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">
+              <span class="xp">Signal Feed</span>
+              <span class="nb">What the AI is reading</span>
+            </span>
+            <span class="card-meta">WorldSnapshot.signals</span>
+          </div>
+          <div class="signal-list">
+            <div class="signal-item">
+              <div class="sig-dot t-news"></div>
+              <div class="sig-body">
+                <div class="sig-source">
+                  <span class="xp">CRYPTOPANIC · news · [btc, eth]</span>
+                  <span class="nb">News · Bitcoin &amp; Ethereum</span>
+                </div>
+                <div class="sig-text">SEC reportedly probing 3 major exchanges over custody rules</div>
+                <div class="sig-time">3 min ago</div>
+              </div>
+            </div>
+            <div class="signal-item">
+              <div class="sig-dot t-sentiment"></div>
+              <div class="sig-body">
+                <div class="sig-source">
+                  <span class="xp">ALTERNATIVE.ME · sentiment · [all]</span>
+                  <span class="nb">Market Mood · all coins</span>
+                </div>
+                <div class="sig-text">Fear &amp; Greed Index up 14pts to 52 — Neutral</div>
+                <div class="sig-time">15 min ago</div>
+              </div>
+            </div>
+            <div class="signal-item">
+              <div class="sig-dot t-onchain"></div>
+              <div class="sig-body">
+                <div class="sig-source">
+                  <span class="xp">GLASSNODE · onchain · [btc]</span>
+                  <span class="nb">Blockchain activity · Bitcoin</span>
+                </div>
+                <div class="sig-text">BTC exchange reserves fell to 3-month low (2.04M BTC)</div>
+                <div class="sig-time nb" style="margin-top:0; font-size:10px; color: var(--muted);">Less Bitcoin on exchanges = investors holding, not selling</div>
+                <div class="sig-time">28 min ago</div>
+              </div>
+            </div>
+            <div class="signal-item">
+              <div class="sig-dot t-macro"></div>
+              <div class="sig-body">
+                <div class="sig-source">
+                  <span class="xp">NEWSAPI · macro · [all]</span>
+                  <span class="nb">Economy news · all coins</span>
+                </div>
+                <div class="sig-text">Fed minutes: members open to June pause as inflation cools</div>
+                <div class="sig-time nb" style="margin-top:0; font-size:10px; color: var(--muted);">Central bank may stop raising rates — often good for crypto</div>
+                <div class="sig-time">1h 12m ago</div>
+              </div>
+            </div>
+            <div class="signal-item">
+              <div class="sig-dot t-sentiment"></div>
+              <div class="sig-body">
+                <div class="sig-source">
+                  <span class="xp">REDDIT · sentiment · [all]</span>
+                  <span class="nb">Social media mood · all coins</span>
+                </div>
+                <div class="sig-text">
+                  <span class="xp">r/CryptoCurrency: −0.42 score across 2,100 analysed posts</span>
+                  <span class="nb">People on Reddit are mostly negative right now</span>
+                </div>
+                <div class="sig-time">42 min ago</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ OPEN POSITIONS ════ -->
+    <div class="screen" id="screen-positions">
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">
+            <span class="xp">Open Positions</span>
+            <span class="nb">Active Trades</span>
+          </span>
+          <span class="card-meta">findOpenTrades() · polling /api/positions 30s</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Coin</th>
+              <th>
+                <span class="xp">Side</span>
+                <span class="nb">Direction</span>
+              </th>
+              <th class="r">
+                <span class="xp">Entry Price</span>
+                <span class="nb">Bought At</span>
+              </th>
+              <th class="r">
+                <span class="xp">Size</span>
+                <span class="nb">Amount</span>
+              </th>
+              <th>
+                <span class="xp">Reasoning</span>
+                <span class="nb">Why the AI did this</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><div class="coin-badge"><div class="coin-icon ci-btc">₿</div>BTC/USDT</div></td>
+              <td><span class="side-buy">BUY</span></td>
+              <td class="r mono">$61,240.00</td>
+              <td class="r mono">$1,200.00</td>
+              <td class="reasoning-cell">
+                <div class="rt" onclick="this.classList.toggle('expanded')">
+                  <span class="xp">Whale accumulation signal from CryptoQuant (net exchange outflow +8,200 BTC in 24h). Bullish divergence on 4h MACD. Low macro news risk — no upcoming Fed events. On-chain data quality score: 0.92.</span>
+                  <span class="nb">Large investors have been quietly moving 8,200 Bitcoin off exchanges over the past 24 hours — this usually means they plan to hold it, not sell. The price chart also looks like it wants to keep going up. No big economic announcements expected soon that could spook the market.</span>
+                </div>
+                <div class="conf-wrap">
+                  <div class="conf-track"><div class="conf-fill" style="width:79%"></div></div>
+                  <span class="conf-pct">79%</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><div class="coin-badge"><div class="coin-icon ci-eth">Ξ</div>ETH/USDT</div></td>
+              <td><span class="side-buy">BUY</span></td>
+              <td class="r mono">$3,280.00</td>
+              <td class="r mono">$800.00</td>
+              <td class="reasoning-cell">
+                <div class="rt" onclick="this.classList.toggle('expanded')">
+                  <span class="xp">ETF inflows resumed after 3-day pause. Staking yield compression reducing sell-side pressure. Reddit sentiment shifted net positive in past 6h. CryptoPanic news score +0.62.</span>
+                  <span class="nb">Big investment funds started buying Ethereum again after a brief pause. People who own Ethereum have less reason to sell it right now. Online sentiment has turned positive in the last 6 hours and the news has been more good than bad.</span>
+                </div>
+                <div class="conf-wrap">
+                  <div class="conf-track"><div class="conf-fill" style="width:71%"></div></div>
+                  <span class="conf-pct">71%</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><div class="coin-badge"><div class="coin-icon ci-sol">◎</div>SOL/USDT</div></td>
+              <td><span class="side-sell">SELL</span></td>
+              <td class="r mono">$148.20</td>
+              <td class="r mono">$600.00</td>
+              <td class="reasoning-cell">
+                <div class="rt" onclick="this.classList.toggle('expanded')">
+                  <span class="xp">Negative CryptoPanic news cluster: 3 articles re: validator outage affecting 4.2% of stake. On-chain DEX volume declining 18% vs 7-day MA. Signal polarity clear; confidence 0.61.</span>
+                  <span class="nb">Three news articles reported a technical problem with Solana's network. Fewer people are using Solana right now compared to last week. The AI is betting the price will go down, so it opened a "short" — a trade that profits if the price falls.</span>
+                </div>
+                <div class="conf-wrap">
+                  <div class="conf-track"><div class="conf-fill" style="width:61%"></div></div>
+                  <span class="conf-pct">61%</span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ════ TRADE HISTORY ════ -->
+    <div class="screen" id="screen-trades">
+      <div class="card">
+        <div class="card-head">
+          <span class="card-title">Trade History</span>
+          <span class="card-meta">findRecentTrades(50) · page 1 of 1</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Coin</th>
+              <th>
+                <span class="xp">Side</span>
+                <span class="nb">Direction</span>
+              </th>
+              <th class="r">
+                <span class="xp">Entry</span>
+                <span class="nb">Bought At</span>
+              </th>
+              <th class="r">
+                <span class="xp">Exit</span>
+                <span class="nb">Sold At</span>
+              </th>
+              <th class="r">
+                <span class="xp">P&amp;L</span>
+                <span class="nb">Profit / Loss</span>
+              </th>
+              <th class="r">
+                <span class="xp">Duration</span>
+                <span class="nb">How Long</span>
+              </th>
+              <th>
+                <span class="xp">Reasoning</span>
+                <span class="nb">Why</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><div class="coin-badge"><div class="coin-icon ci-btc">₿</div>BTC/USDT</div></td>
+              <td><span class="side-buy">BUY</span></td>
+              <td class="r mono">$60,100</td>
+              <td class="r mono">$62,410</td>
+              <td class="r mono c-pos">+$312.40</td>
+              <td class="r mono c-mut">4h 22m</td>
+              <td class="reasoning-cell">
+                <div class="rt" onclick="this.classList.toggle('expanded')">
+                  <span class="xp">Whale accumulation + bullish MACD divergence. Low macro risk. Exit triggered by take-profit at $62,400.</span>
+                  <span class="nb">Big investors were buying quietly and the price chart looked bullish. The trade closed automatically when Bitcoin hit the profit target the AI set.</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><div class="coin-badge"><div class="coin-icon ci-doge">D</div>DOGE/USDT</div></td>
+              <td><span class="side-buy">BUY</span></td>
+              <td class="r mono">$0.1420</td>
+              <td class="r mono">$0.1360</td>
+              <td class="r mono c-neg">−$44.10</td>
+              <td class="r mono c-mut">1h 08m</td>
+              <td class="reasoning-cell">
+                <div class="rt" onclick="this.classList.toggle('expanded')">
+                  <span class="xp">Social sentiment spike on r/dogecoin. News aggregator returned mixed signal. Stop-loss hit at $0.136. Social-only signal without on-chain confirmation was insufficient.</span>
+                  <span class="nb">People on Reddit were excited about Dogecoin, but there was no real evidence behind it. The price dropped and the safety net (stop-loss) sold automatically to limit the damage. Lesson: hype alone isn't enough.</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><div class="coin-badge"><div class="coin-icon ci-eth">Ξ</div>ETH/USDT</div></td>
+              <td><span class="side-sell">SELL</span></td>
+              <td class="r mono">$3,340</td>
+              <td class="r mono">$3,252</td>
+              <td class="r mono c-pos">+$88.00</td>
+              <td class="r mono c-mut">2h 45m</td>
+              <td class="reasoning-cell">
+                <div class="rt" onclick="this.classList.toggle('expanded')">
+                  <span class="xp">Macro uncertainty ahead of FOMC minutes. ETH/BTC ratio declining 3.1%. Large-wallet outflows to CEX elevated. Exited at take-profit.</span>
+                  <span class="nb">Big economic news was coming and the AI expected uncertainty to push Ethereum down. It opened a "short" (bet on price falling) and was right — closed at profit.</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><div class="coin-badge"><div class="coin-icon ci-bnb">B</div>BNB/USDT</div></td>
+              <td><span class="side-buy">BUY</span></td>
+              <td class="r mono">$412.50</td>
+              <td class="r mono">$420.00</td>
+              <td class="r mono c-pos">+$22.60</td>
+              <td class="r mono c-mut">6h 11m</td>
+              <td class="reasoning-cell">
+                <div class="rt" onclick="this.classList.toggle('expanded')">
+                  <span class="xp">BSC TVL growing 8% WoW. Positive macro backdrop. Low position size due to low signal confidence (0.61).</span>
+                  <span class="nb">More money was flowing into Binance's blockchain ecosystem, which usually lifts BNB. The AI wasn't super confident so it kept the bet small — small risk, small reward.</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><div class="coin-badge"><div class="coin-icon ci-sol">◎</div>SOL/USDT</div></td>
+              <td><span class="side-buy">BUY</span></td>
+              <td class="r mono">$155.40</td>
+              <td class="r mono">$148.70</td>
+              <td class="r mono c-neg">−$91.30</td>
+              <td class="r mono c-mut">0h 52m</td>
+              <td class="reasoning-cell">
+                <div class="rt" onclick="this.classList.toggle('expanded')">
+                  <span class="xp">Momentum trade on 1h breakout. Reversed sharply on validator outage news (CryptoPanic score −0.88). Stop-loss hit. Price-only signal; on-chain data not consulted.</span>
+                  <span class="nb">The price was rising fast so the AI jumped in. Bad news about Solana's network hit right after and the price reversed. The automatic stop-loss sold quickly to limit losses. The AI relied too much on price momentum alone.</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><div class="coin-badge"><div class="coin-icon ci-btc">₿</div>BTC/USDT</div></td>
+              <td><span class="side-sell">SELL</span></td>
+              <td class="r mono">$63,200</td>
+              <td class="r mono">$61,800</td>
+              <td class="r mono c-pos">+$140.00</td>
+              <td class="r mono c-mut">3h 30m</td>
+              <td class="reasoning-cell">
+                <div class="rt" onclick="this.classList.toggle('expanded')">
+                  <span class="xp">Short on overbought RSI (78) + negative CryptoPanic news (SEC probe rumour). On-chain exchange inflows elevated. Covered at support level.</span>
+                  <span class="nb">Bitcoin was overheated (RSI 78 means overbought) and bad news about regulators appeared. The AI bet the price would fall, and it did — closed the trade for a profit.</span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="pagination">
+          <span class="pag-info">Showing 1–6 of 42 trades</span>
+          <div class="pag-btns">
+            <button class="pag-btn" disabled>← Previous</button>
+            <button class="pag-btn">Next →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ BACKTEST ════ -->
+    <div class="screen" id="screen-backtest">
+      <div style="display: grid; grid-template-columns: 272px 1fr; gap: 14px; align-items: start;">
+
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">
+              <span class="xp">Backtest Config</span>
+              <span class="nb">Test settings</span>
+            </span>
+          </div>
+          <div style="padding: 12px 13px;">
+            <div class="form-group">
+              <label class="form-label">
+                <span class="xp">From</span>
+                <span class="nb">Start date</span>
+              </label>
+              <input class="form-input" type="date" value="2025-04-01">
+            </div>
+            <div class="form-group">
+              <label class="form-label">
+                <span class="xp">To</span>
+                <span class="nb">End date</span>
+              </label>
+              <input class="form-input" type="date" value="2025-05-05">
+            </div>
+            <div class="form-group">
+              <label class="form-label">
+                <span class="xp">Initial Capital ($)</span>
+                <span class="nb">Starting money ($)</span>
+              </label>
+              <input class="form-input" type="number" value="1000" min="100">
+            </div>
+            <div class="form-group">
+              <label class="form-label">
+                <span class="xp">Coins (comma-separated)</span>
+                <span class="nb">Which coins to test</span>
+              </label>
+              <input class="form-input" type="text" value="BTC/USDT,ETH/USDT">
+            </div>
+            <div class="form-group">
+              <label class="form-label">
+                <span class="xp">LLM Model</span>
+                <span class="nb">AI brain to use</span>
+              </label>
+              <select class="form-input">
+                <option selected>claude-haiku-4-5 (fast &amp; cheap)</option>
+                <option>claude-sonnet-4-6 (balanced)</option>
+                <option>claude-opus-4-7 (smartest)</option>
+              </select>
+            </div>
+            <button class="btn btn-run" onclick="runBacktest()">
+              <span class="xp">Run Backtest</span>
+              <span class="nb">Simulate the AI on past data</span>
+            </button>
+          </div>
+        </div>
+
+        <div id="backtest-results">
+          <div style="padding: 40px 0; text-align: center; color: var(--muted); font-family: var(--fm); font-size: 11.5px;">
+            <span class="xp">Configure and run a backtest to see results</span>
+            <span class="nb">Set your dates and click the button to see how the AI would have done</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ── Mode toggle ── */
+function setMode(m) {
+  document.body.classList.toggle('noob', m === 'noob');
+  localStorage.setItem('traderMode', m);
+}
+
+/* Restore saved mode */
+(function() {
+  if (localStorage.getItem('traderMode') === 'noob') document.body.classList.add('noob');
+})();
+
+/* ── Navigation ── */
+function go(id, btn) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('page-title').textContent = btn.dataset.title || id;
+}
+
+/* ── Countdown ── */
+(function() {
+  let secs = 484;
+  const el = document.getElementById('countdown');
+  if (!el) return;
+  const t = setInterval(() => {
+    secs--;
+    if (secs <= 0) { clearInterval(t); el.textContent = 'Expired'; return; }
+    const m = Math.floor(secs / 60), s = secs % 60;
+    const timeStr = m + ':' + String(s).padStart(2, '0');
+    el.querySelector('.xp').textContent = 'Auto-cancel in ' + timeStr;
+    el.querySelector('.nb').textContent = 'Will expire in ' + timeStr;
+  }, 1000);
+})();
+
+/* ── Cycle clock ── */
+(function() {
+  const el = document.getElementById('cycle-clock');
+  if (!el) return;
+  let end = Date.now() + 8 * 60 * 1000 + 47 * 1000;
+  setInterval(() => {
+    const diff = Math.max(0, Math.round((end - Date.now()) / 1000));
+    if (diff === 0) end = Date.now() + 15 * 60 * 1000;
+    const m = Math.floor(diff / 60), s = diff % 60;
+    el.textContent = 'Next cycle ' + String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }, 1000);
+})();
+
+/* ── Backtest ── */
+function runBacktest() {
+  const isNoob = document.body.classList.contains('noob');
+  const el = document.getElementById('backtest-results');
+  el.innerHTML = '<div class="running-state"><div class="spinner"></div>' +
+    (isNoob ? 'Replaying history… the AI is making decisions on old data to see how it would have done.'
+             : 'Running backtest — calling claude-haiku-4-5 for each 15m cycle…') + '</div>';
+  setTimeout(() => { el.innerHTML = buildResults(); drawChart(); }, 2200);
+}
+
+function buildResults() {
+  const noob = document.body.classList.contains('noob');
+  const stats = [
+    { label: 'Total P&L',     nb: 'Total Profit',         value: '+$842.30', cls: 'c-pos',  sub: '+84.23% on $1,000',      nsub: 'Up 84% from $1,000 start' },
+    { label: 'Win Rate',      nb: 'Trades that won',       value: '64.7%',    cls: 'c-pos',  sub: '22 / 34 trades',         nsub: '22 wins out of 34 total' },
+    { label: 'Total Trades',  nb: 'Total Trades',          value: '34',       cls: '',        sub: 'Apr 1 → May 5',          nsub: 'over 35 days' },
+    { label: 'Max Drawdown',  nb: 'Worst losing streak',   value: '−12.8%',   cls: 'c-neg',  sub: '$128 peak-to-trough',    nsub: 'Lost up to $128 at one point' },
+    { label: 'Sharpe Ratio',  nb: 'Risk vs Reward score',  value: '1.84',     cls: 'c-info', sub: 'annualised',             nsub: '> 1.0 is considered good' },
+    { label: 'Avg Hold Time', nb: 'Average trade length',  value: '2h 00m',   cls: '',        sub: 'per closed trade',       nsub: 'each trade lasted ~2 hours' },
+  ];
+
+  const cards = stats.map(s => `
+    <div class="stat-card">
+      <div class="stat-label"><span class="xp">${s.label}</span><span class="nb">${s.nb}</span></div>
+      <div class="stat-value ${s.cls}">${s.value}</div>
+      <div class="stat-sub c-mut"><span class="xp">${s.sub}</span><span class="nb">${s.nsub}</span></div>
+    </div>`).join('');
+
+  return `
+    <div>
+      <div class="results-label">BacktestResult.stats</div>
+      <div class="stat-grid-6">${cards}</div>
+      <div class="chart-wrap">
+        <div class="chart-title">
+          <span class="xp">BacktestResult.pnlCurve · PnlPoint[] (timestamp, capital)</span>
+          <span class="nb">How your $1,000 would have grown over time</span>
+        </div>
+        <svg class="chart-svg" viewBox="0 0 520 148" id="pnl-chart"></svg>
+      </div>
+    </div>`;
+}
+
+function drawChart() {
+  const svg = document.getElementById('pnl-chart');
+  if (!svg) return;
+
+  const raw = [
+    1000, 1022, 1018, 1048, 1040, 1084, 1072, 1114, 1098, 1132,
+    1120, 1164, 1148, 1062, 1090, 1142, 1118, 1184, 1168, 1220,
+    1204, 1268, 1248, 1320, 1302, 1388, 1370, 1460, 1440, 1540,
+    1520, 1634, 1618, 1730, 1842
+  ];
+
+  const W = 520, H = 148;
+  const pad = { t: 10, r: 10, b: 26, l: 50 };
+  const cW = W - pad.l - pad.r;
+  const cH = H - pad.t - pad.b;
+
+  const minV = Math.min(...raw);
+  const maxV = Math.max(...raw);
+  const span = maxV - minV;
+  const minY = minV - span * 0.08;
+  const maxY = maxV + span * 0.05;
+
+  const px = i => pad.l + (i / (raw.length - 1)) * cW;
+  const py = v => pad.t + (1 - (v - minY) / (maxY - minY)) * cH;
+
+  const pts  = raw.map((v, i) => `${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' ');
+  const fill = `${px(0).toFixed(1)},${(pad.t + cH).toFixed(1)} ${pts} ${px(raw.length-1).toFixed(1)},${(pad.t + cH).toFixed(1)}`;
+
+  const yVals  = [minV, Math.round((minV + maxV) / 2), maxV];
+  const yLabels = yVals.map(v => {
+    const y = py(v).toFixed(1);
+    return `<text x="${pad.l - 5}" y="${y}" text-anchor="end" dominant-baseline="middle" fill="#50506a" font-size="9" font-family="ui-monospace,monospace">$${Math.round(v).toLocaleString()}</text>`;
+  }).join('');
+
+  const xLabels = [[0,'Apr 1'],[11,'Apr 12'],[23,'Apr 24'],[34,'May 5']].map(([i, l]) =>
+    `<text x="${px(i).toFixed(1)}" y="${H-5}" text-anchor="middle" fill="#50506a" font-size="9" font-family="ui-monospace,monospace">${l}</text>`
+  ).join('');
+
+  const gridLines = yVals.map(v =>
+    `<line x1="${pad.l}" y1="${py(v).toFixed(1)}" x2="${W-pad.r}" y2="${py(v).toFixed(1)}" stroke="#1e1e2c" stroke-width="1"/>`
+  ).join('');
+
+  svg.innerHTML = `
+    <defs>
+      <linearGradient id="pnlGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%"   stop-color="#10c97a" stop-opacity="0.18"/>
+        <stop offset="100%" stop-color="#10c97a" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    ${gridLines}
+    <polygon points="${fill}" fill="url(#pnlGrad)"/>
+    <polyline points="${pts}" fill="none" stroke="#10c97a" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+    ${yLabels}${xLabels}`;
+}
+</script>
+
+</body>
+</html>
