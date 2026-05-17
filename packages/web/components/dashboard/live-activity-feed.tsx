@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useDecisions } from '@/lib/queries'
+import { useState, useEffect } from 'react'
+import { useDecisions, useSettings, usePaused } from '@/lib/queries'
 import { useLiveEvents } from '@/lib/use-app-events'
 import type { AppEvent, StoredDecision } from '@/lib/api-client'
 
@@ -80,8 +80,40 @@ function toRows(items: FeedItem[]): Row[] {
   return rows
 }
 
-function fmtTime(at: number): string {
-  return new Date(at).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' })
+/** Date + time stamp, e.g. "May 16, 14:30". */
+function fmtStamp(at: number): string {
+  return new Date(at).toLocaleString('en-US', {
+    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+  })
+}
+
+/**
+ * Countdown to the bot's next scheduled decision. The cron grid is aligned to
+ * the run interval, so the next cycle is the next interval boundary.
+ */
+function NextDecision() {
+  const { data: settings } = useSettings()
+  const { data: paused } = usePaused()
+  const [now, setNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  const label = (text: string) => (
+    <span style={{ fontFamily: 'monospace', fontSize: '10px', color: 'var(--muted)' }}>{text}</span>
+  )
+
+  if (paused?.paused) return label('paused')
+  const interval = settings?.runIntervalMinutes
+  if (!interval) return null
+
+  const intervalMs = interval * 60_000
+  const remaining = Math.max(0, Math.ceil(now / intervalMs) * intervalMs - now)
+  const m = Math.floor(remaining / 60_000)
+  const s = Math.floor((remaining % 60_000) / 1000)
+  return label(`next decision in ${m}:${String(s).padStart(2, '0')}`)
 }
 
 /**
@@ -105,7 +137,10 @@ export function LiveActivityFeed() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <div style={{ fontWeight: 600, fontSize: '12px', marginBottom: '10px' }}>Live Activity</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px', marginBottom: '10px' }}>
+        <span style={{ fontWeight: 600, fontSize: '12px' }}>Live Activity</span>
+        <span style={{ marginLeft: 'auto' }}><NextDecision /></span>
+      </div>
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
         {rows.length === 0 && (
           <p style={{ color: 'var(--muted)', fontSize: '11px' }}>Waiting for the bot to act…</p>
@@ -138,7 +173,7 @@ function ActivityCard({ item }: { item: FeedItem }) {
       <div style={{ display: 'flex', gap: '8px', alignItems: 'baseline', fontFamily: 'monospace', fontSize: '11px' }}>
         <span style={{ color: item.tone, fontWeight: 700, flexShrink: 0 }}>{item.label}</span>
         <span style={{ color: 'var(--muted)', marginLeft: 'auto', flexShrink: 0, fontSize: '9.5px' }}>
-          {fmtTime(item.at)}
+          {fmtStamp(item.at)}
         </span>
       </div>
       <div style={{ color: 'var(--muted)', fontSize: '10.5px', lineHeight: 1.5, marginTop: '2px' }}>
@@ -176,7 +211,7 @@ function HoldGroup({
         </span>
         <span style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'baseline' }}>
           <span style={{ color: 'var(--muted)', fontSize: '9.5px' }}>
-            {fmtTime(oldest)}–{fmtTime(newest)}
+            {fmtStamp(oldest)}–{fmtStamp(newest)}
           </span>
           <span style={{ color: 'var(--muted)' }}>{open ? '▾' : '▸'}</span>
         </span>
@@ -193,7 +228,7 @@ function HoldGroup({
             >
               <div style={{ display: 'flex', gap: '8px', fontFamily: 'monospace', fontSize: '10px' }}>
                 <span style={{ color: 'var(--muted)', fontWeight: 700 }}>HOLD</span>
-                <span style={{ color: 'var(--muted)', marginLeft: 'auto', fontSize: '9px' }}>{fmtTime(item.at)}</span>
+                <span style={{ color: 'var(--muted)', marginLeft: 'auto', fontSize: '9px' }}>{fmtStamp(item.at)}</span>
               </div>
               <div style={{ color: 'var(--muted)', fontSize: '10px', lineHeight: 1.5, marginTop: '2px' }}>
                 {item.text}
