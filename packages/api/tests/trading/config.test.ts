@@ -17,32 +17,40 @@ function withEnv(vars: Record<string, string>, fn: () => void): void {
   }
 }
 
+// Includes an LLM provider + its key so loadConfig's provider check (which
+// runs before the Binance check) passes — keeps tests independent of any
+// ambient OPENAI_API_KEY / LLM_PROVIDER in the environment.
 const requiredEnv = {
   BINANCE_API_KEY: 'test-key',
   BINANCE_SECRET: 'test-secret',
+  LLM_PROVIDER: 'anthropic',
   ANTHROPIC_API_KEY: 'test-anthropic',
 }
 
 describe('loadConfig', () => {
   beforeEach(() => {
-    delete process.env['BINANCE_API_KEY']
-    delete process.env['BINANCE_SECRET']
-    delete process.env['ANTHROPIC_API_KEY']
-    delete process.env['TOTAL_CAPITAL']
-    delete process.env['AUTO_TRADE_LIMIT']
-    delete process.env['OHLCV_LIMIT']
-    delete process.env['COINS']
-    delete process.env['TIMEFRAME']
-    delete process.env['PAPER']
-    delete process.env['TELEGRAM_BOT_TOKEN']
-    delete process.env['TELEGRAM_CHAT_ID']
+    // Clear every env var loadConfig reads so tests do not inherit the
+    // developer's shell or .env. loadConfig validates the LLM provider key
+    // before BINANCE_API_KEY, so OPENAI_API_KEY / LLM_PROVIDER must be cleared
+    // too or those checks mask the one under test.
+    for (const key of [
+      'BINANCE_API_KEY', 'BINANCE_SECRET', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY',
+      'LLM_PROVIDER', 'TOTAL_CAPITAL', 'AUTO_TRADE_LIMIT', 'OHLCV_LIMIT',
+      'COINS', 'TIMEFRAME', 'PAPER', 'CRON_EXPRESSION',
+      'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID',
+    ]) {
+      delete process.env[key]
+    }
   })
 
   it('throws when BINANCE_API_KEY is missing', () => {
+    // Satisfy the LLM provider check so BINANCE_API_KEY is the first failure.
+    process.env['OPENAI_API_KEY'] = 'key'
     expect(() => loadConfig()).toThrow('BINANCE_API_KEY')
   })
 
   it('throws when BINANCE_SECRET is missing', () => {
+    process.env['OPENAI_API_KEY'] = 'key'
     process.env['BINANCE_API_KEY'] = 'key'
     expect(() => loadConfig()).toThrow('BINANCE_SECRET')
   })
