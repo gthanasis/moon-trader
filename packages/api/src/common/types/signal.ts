@@ -1,4 +1,4 @@
-export type SignalType = 'news' | 'sentiment' | 'onchain' | 'macro' | 'price'
+export type SignalType = 'news' | 'sentiment' | 'onchain' | 'macro' | 'price' | 'microstructure'
 
 export interface Signal {
   source: string

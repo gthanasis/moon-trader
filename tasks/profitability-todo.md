@@ -12,7 +12,7 @@ numbering (1 critic+lessons, 2 alpha, 4 exits, 5 features+microstructure,
 ## Phase 1 — Deterministic Features + Microstructure (Item 5)
 - [x] Task 1: typed `FeatureSet` + `computeFeatures`, `{features}` placeholder,
       `LlmDecision.features` JSONB snapshot (migration 20260517000000)
-- [ ] Task 2: Funding-rate + open-interest data source
+- [x] Task 2: `BinanceFuturesSource` — funding rate + open interest, `microstructure` SignalType
 - [ ] Task 3: Order-book-imbalance data source
 - [ ] Task 3b: Liquidation websocket collector
 - [ ] Task 4: Wire microstructure into pipeline + `{microstructure}` placeholder
