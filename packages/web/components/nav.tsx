@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { Logo } from '@/components/logo'
 
 const links = [
   { href: '/',          xp: 'Overview',        nb: 'Home' },
@@ -24,8 +25,9 @@ export function Nav() {
       padding: '16px 0', zIndex: 20,
     }}>
       {/* brand */}
-      <div style={{ padding: '0 16px 16px', fontWeight: 600, fontSize: '14px' }}>
-        Trader
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 16px 16px', fontWeight: 600, fontSize: '14px' }}>
+        <Logo size={20} />
+        <span>Moon Trader</span>
       </div>
 
       {/* nav items */}
