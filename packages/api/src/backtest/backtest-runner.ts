@@ -325,6 +325,7 @@ export class BacktestRunner {
       autoTradeLimit,
       riskPerTradePct: this.config.riskPerTradePct,
       minConfidence: this.config.minConfidence,
+      promptOverrides: this.config.promptOverrides,
       getRecentTrades: () => Promise.resolve(engine.getClosedTrades().slice(-5).map(toTrade)),
     })
 
@@ -341,12 +342,12 @@ export class BacktestRunner {
       pipeline.setTime(currentTime)
       engine.setTime(currentTime)
 
-      const cycleResult = await cycle.run()
+      const cycleResults = await cycle.run()
 
       engine.pushPnlPoint(currentTime)
 
       try {
-        await this.config.onStep?.(step, total, currentTime, cycleResult)
+        await this.config.onStep?.(step, total, currentTime, cycleResults)
       } catch (err) {
         this.logger.warn(`onStep callback threw: ${String(err)}`)
       }

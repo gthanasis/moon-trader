@@ -1,7 +1,17 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { type BotSettings, BOT_SETTINGS_BOUNDS, DEFAULT_BOT_SETTINGS } from '@api/common'
+import { useMemo, useRef, useState } from 'react'
+import {
+  type BotSettings,
+  type StrategyPreset,
+  type PresetSettings,
+  BOT_SETTINGS_BOUNDS,
+  DEFAULT_BOT_SETTINGS,
+  PROMPT_PLACEHOLDERS,
+  PROMPT_MAX_LENGTH,
+  CORE_SYSTEM_RULES,
+  STRATEGY_PRESETS,
+} from '@api/common'
 import { usePaused, useSetPaused, useSaveSettings } from '@/lib/queries'
 import { Select } from '@/components/ui/select'
 import { NumberStepper } from '@/components/ui/number-stepper'
@@ -148,6 +158,137 @@ function Switch({
   )
 }
 
+const PLACEHOLDER_NAMES = new Set<string>(PROMPT_PLACEHOLDERS.map(p => p.name))
+
+/** Distinct `{token}`s in the template that aren't recognised placeholders. */
+function unknownTokens(template: string): string[] {
+  const found = template.match(/\{\w+\}/g) ?? []
+  return [...new Set(found.filter(t => !PLACEHOLDER_NAMES.has(t.slice(1, -1))))]
+}
+
+/** First flat row number used by the prompt section (continues numeric fields). */
+const PROMPT_ROW_START = FIELDS.length + BOT_ROW_COUNT
+
+/** One editable prompt textarea with a row number, label, hint and change dot. */
+function PromptField({
+  row,
+  label,
+  hint,
+  value,
+  onChange,
+  changed,
+  atDefault,
+  onReset,
+  textareaRef,
+  children,
+}: {
+  row: number
+  label: string
+  hint: string
+  value: string
+  onChange: (v: string) => void
+  changed: boolean
+  /** True when the value already equals the shipped default. */
+  atDefault: boolean
+  /** Restores the field to its shipped default. */
+  onReset: () => void
+  textareaRef?: React.RefObject<HTMLTextAreaElement>
+  /** Optional extra controls (placeholder chips) rendered under the textarea. */
+  children?: React.ReactNode
+}) {
+  const over = value.length > PROMPT_MAX_LENGTH
+  return (
+    <section className="relative grid grid-cols-[34px_1fr] gap-4 border-b border-border px-6 py-[15px] max-[560px]:grid-cols-1 max-[560px]:gap-2.5">
+      {changed && <span className="absolute inset-y-0 left-0 w-0.5 bg-accent" />}
+      <div className="pt-0.5 font-mono text-sm tracking-[0.04em] text-muted max-[560px]:hidden">
+        {String(row).padStart(2, '0')}
+      </div>
+      <div>
+        <div className="flex items-baseline gap-[9px]">
+          <span className="text-[13px] font-[640] tracking-[-0.01em] text-fg">{label}</span>
+          {changed && (
+            <span
+              title="Unsaved change"
+              className="h-[5px] w-[5px] self-center rounded-full bg-accent shadow-[0_0_8px_var(--accent)]"
+            />
+          )}
+          <button
+            type="button"
+            disabled={atDefault}
+            onClick={onReset}
+            className="ml-auto cursor-pointer rounded-sm border border-border bg-transparent px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.06em] text-muted transition-colors enabled:hover:border-accent enabled:hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {atDefault ? 'at default' : 'reset to default'}
+          </button>
+        </div>
+        <p className="mt-1.5 max-w-[56ch] text-[11.5px] leading-[1.5] text-muted">{hint}</p>
+        <textarea
+          ref={textareaRef}
+          aria-label={label}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          spellCheck={false}
+          rows={8}
+          className="mt-2.5 w-full resize-y rounded border bg-bg px-3 py-2 font-mono text-[11.5px] leading-[1.55] text-fg outline-none focus:border-accent"
+          style={{ borderColor: over ? 'var(--neg)' : 'var(--border)' }}
+        />
+        <div className="mt-1 flex justify-between font-mono text-[10px] uppercase tracking-[0.04em]">
+          <span className="text-muted">drop or click a chip to insert</span>
+          <span style={{ color: over ? 'var(--neg)' : 'var(--muted)' }}>
+            {value.length} / {PROMPT_MAX_LENGTH}
+          </span>
+        </div>
+        {children}
+      </div>
+    </section>
+  )
+}
+
+/** Cards that apply a ready-made strategy preset to the whole form at once. */
+function PresetPicker({
+  values,
+  onApply,
+}: {
+  values: BotSettings
+  onApply: (preset: StrategyPreset) => void
+}) {
+  // A preset is "in use" when every field it sets already matches the form.
+  const activeId =
+    STRATEGY_PRESETS.find(p =>
+      (Object.keys(p.settings) as (keyof PresetSettings)[]).every(k => values[k] === p.settings[k]),
+    )?.id ?? null
+
+  return (
+    <div className="grid gap-2.5 px-6 py-[15px] sm:grid-cols-3 max-[560px]:grid-cols-1">
+      {STRATEGY_PRESETS.map(p => {
+        const active = p.id === activeId
+        return (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => onApply(p)}
+            className="flex cursor-pointer flex-col gap-1.5 rounded border bg-bg p-3 text-left transition-colors hover:border-accent"
+            style={{ borderColor: active ? 'var(--accent)' : 'var(--border)' }}
+          >
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-fg">
+                {p.name}
+              </span>
+              {active && (
+                <span className="rounded-sm border border-[color-mix(in_oklch,var(--accent)_35%,transparent)] px-1 text-[9px] uppercase text-accent">
+                  in use
+                </span>
+              )}
+            </div>
+            <span className="text-[11px] font-[560] leading-[1.4] text-accent">{p.tagline}</span>
+            <p className="m-0 text-[10.5px] leading-[1.5] text-muted">{p.description}</p>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export function SettingsForm({ initial }: { initial: BotSettings }) {
   const [saved, setSaved] = useState<BotSettings>(initial)
   const [values, setValues] = useState<BotSettings>(initial)
@@ -166,9 +307,46 @@ export function SettingsForm({ initial }: { initial: BotSettings }) {
   const [confirmReal, setConfirmReal] = useState(false)
 
   const dirty = useMemo(
-    () => FIELDS.some(f => values[f.key] !== saved[f.key]) || values.paperMode !== saved.paperMode,
+    () =>
+      FIELDS.some(f => values[f.key] !== saved[f.key]) ||
+      values.paperMode !== saved.paperMode ||
+      values.strategyPrompt !== saved.strategyPrompt ||
+      values.promptTemplate !== saved.promptTemplate,
     [values, saved],
   )
+
+  // Ref to the data-template textarea so chip clicks insert at the caret.
+  const templateRef = useRef<HTMLTextAreaElement>(null)
+
+  /** Inserts a `{name}` token at the template caret (or appends on click). */
+  const insertPlaceholder = (name: string) => {
+    const token = `{${name}}`
+    const el = templateRef.current
+    setStatus(null)
+    setValues(v => {
+      const text = v.promptTemplate
+      const start = el?.selectionStart ?? text.length
+      const end = el?.selectionEnd ?? text.length
+      return { ...v, promptTemplate: text.slice(0, start) + token + text.slice(end) }
+    })
+    // Restore focus and place the caret after the inserted token.
+    requestAnimationFrame(() => {
+      if (!el) return
+      const pos = (el.selectionStart ?? el.value.length) + token.length
+      el.focus()
+      el.setSelectionRange(pos, pos)
+    })
+  }
+
+  const badTokens = unknownTokens(values.promptTemplate)
+  const promptsTooLong =
+    values.strategyPrompt.length > PROMPT_MAX_LENGTH || values.promptTemplate.length > PROMPT_MAX_LENGTH
+
+  /** Loads a preset's prompt + parameters into the form as unsaved changes. */
+  const applyPreset = (preset: StrategyPreset) => {
+    setStatus(null)
+    setValues(v => ({ ...v, ...preset.settings }))
+  }
 
   const setField = (f: FieldDef, displayVal: number) => {
     if (!Number.isFinite(displayVal)) return
@@ -236,6 +414,19 @@ export function SettingsForm({ initial }: { initial: BotSettings }) {
       </header>
 
       <div className="flex flex-col">
+        {/* Strategy presets — apply a ready-made prompt + parameter bundle */}
+        <div>
+          <div className="flex flex-wrap items-baseline gap-2.5 border-b border-border bg-bg px-6 pb-[11px] pt-[13px]">
+            <span className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-accent">
+              Strategy presets
+            </span>
+            <span className="text-[10.5px] text-muted">
+              Apply a ready-made strategy, then fine-tune below — applies as an unsaved change
+            </span>
+          </div>
+          <PresetPicker values={values} onApply={applyPreset} />
+        </div>
+
         {/* Bot — power and trading mode */}
         <div>
           <div className="flex flex-wrap items-baseline gap-2.5 border-b border-border bg-bg px-6 pb-[11px] pt-[13px]">
@@ -395,6 +586,81 @@ export function SettingsForm({ initial }: { initial: BotSettings }) {
             })}
           </div>
         ))}
+
+        {/* Prompt — editable strategy text and data template */}
+        <div>
+          <div className="flex flex-wrap items-baseline gap-2.5 border-b border-border bg-bg px-6 pb-[11px] pt-[13px]">
+            <span className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-accent">Prompt</span>
+            <span className="text-[10.5px] text-muted">
+              What the bot is told each cycle — strategy and the data it sees
+            </span>
+          </div>
+
+          <PromptField
+            row={PROMPT_ROW_START + 1}
+            label="Strategy instructions"
+            hint="Free-form persona and strategy text sent at the top of the system prompt. The locked core rules below are always appended after it."
+            value={values.strategyPrompt}
+            changed={values.strategyPrompt !== saved.strategyPrompt}
+            atDefault={values.strategyPrompt === DEFAULT_BOT_SETTINGS.strategyPrompt}
+            onReset={() => {
+              setStatus(null)
+              setValues(prev => ({ ...prev, strategyPrompt: DEFAULT_BOT_SETTINGS.strategyPrompt }))
+            }}
+            onChange={v => {
+              setStatus(null)
+              setValues(prev => ({ ...prev, strategyPrompt: v }))
+            }}
+          >
+            <div className="mt-3 rounded border border-border bg-bg px-3 py-2">
+              <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted">
+                Locked core rules — always appended, not editable
+              </div>
+              <pre className="mt-1.5 m-0 whitespace-pre-wrap font-mono text-[10.5px] leading-[1.5] text-muted">
+                {CORE_SYSTEM_RULES}
+              </pre>
+            </div>
+          </PromptField>
+
+          <PromptField
+            row={PROMPT_ROW_START + 2}
+            label="Data template"
+            hint="The user message. Drag or click a chip to drop live data in. Unknown {tokens} are sent as-is."
+            value={values.promptTemplate}
+            changed={values.promptTemplate !== saved.promptTemplate}
+            atDefault={values.promptTemplate === DEFAULT_BOT_SETTINGS.promptTemplate}
+            onReset={() => {
+              setStatus(null)
+              setValues(prev => ({ ...prev, promptTemplate: DEFAULT_BOT_SETTINGS.promptTemplate }))
+            }}
+            textareaRef={templateRef}
+            onChange={v => {
+              setStatus(null)
+              setValues(prev => ({ ...prev, promptTemplate: v }))
+            }}
+          >
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
+              {PROMPT_PLACEHOLDERS.map(p => (
+                <button
+                  key={p.name}
+                  type="button"
+                  draggable
+                  title={p.description}
+                  onDragStart={e => e.dataTransfer.setData('text/plain', `{${p.name}}`)}
+                  onClick={() => insertPlaceholder(p.name)}
+                  className="cursor-grab rounded-sm border border-border bg-bg px-2 py-1 font-mono text-[10.5px] text-accent transition-colors hover:border-accent active:cursor-grabbing"
+                >
+                  {`{${p.name}}`}
+                </button>
+              ))}
+            </div>
+            {badTokens.length > 0 && (
+              <p className="mt-2 font-mono text-[10.5px] text-warn">
+                Unrecognised, sent literally: {badTokens.join(' ')}
+              </p>
+            )}
+          </PromptField>
+        </div>
       </div>
 
       {/* save bar */}
@@ -430,7 +696,7 @@ export function SettingsForm({ initial }: { initial: BotSettings }) {
           )}
           <button
             type="button"
-            disabled={pending || !dirty}
+            disabled={pending || !dirty || promptsTooLong}
             onClick={save}
             className="h-8 cursor-pointer rounded border border-accent bg-accent px-4 text-[11.5px] font-semibold tracking-[0.01em] text-[#04140d] transition-all enabled:hover:-translate-y-px enabled:hover:shadow-[0_6px_18px_-6px_color-mix(in_oklch,var(--accent)_70%,transparent)] disabled:cursor-not-allowed disabled:opacity-40"
           >

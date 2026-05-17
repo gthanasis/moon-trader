@@ -71,6 +71,15 @@ export class NarrationRepository {
     return rows.map(toDomain)
   }
 
+  /** The most recent narration of one granularity, if any. */
+  async findLatest(granularity: NarrationGranularity): Promise<Narration | null> {
+    const row = await this.prisma.narration.findFirst({
+      where: { granularity },
+      orderBy: { periodStart: 'desc' },
+    })
+    return row ? toDomain(row) : null
+  }
+
   /** The single narration for an exact (granularity, periodStart) slot, if any. */
   async findOne(granularity: NarrationGranularity, periodStart: Date): Promise<Narration | null> {
     const row = await this.prisma.narration.findUnique({

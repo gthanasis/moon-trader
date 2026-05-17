@@ -140,6 +140,18 @@ export function LiveActivityFeed() {
     .sort((a, b) => b.at - a.at)
     .slice(0, 40)
 
+  // --- DEBUG: trace the source of every feed item -------------------------
+  console.log('[live-activity] decisions from API:', decisions.length,
+    decisions.map(d => ({ id: d.id, action: d.action, at: d.decidedAt })))
+  console.log('[live-activity] events in buffer:', events.length,
+    events.map(e => `${e.type}@${e.at}`))
+  console.log('[live-activity] renderedEvents (decision_made/trade_opened filtered out):',
+    renderedEvents.length, renderedEvents.map(e => e.type))
+  const holdItems = items.filter(i => i.label === 'HOLD')
+  console.log('[live-activity] HOLD cards rendered:', holdItems.length,
+    holdItems.map(h => ({ key: h.key, source: h.key[0] === 'd' ? 'DB-row' : 'SSE-event', at: new Date(h.at).toISOString() })))
+  // ------------------------------------------------------------------------
+
   const rows = toRows(items)
 
   return (

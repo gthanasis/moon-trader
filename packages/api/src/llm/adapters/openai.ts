@@ -7,7 +7,7 @@ const TOOL_DEFINITION: OpenAI.Chat.Completions.ChatCompletionTool = {
   type: 'function',
   function: {
     name: 'make_trading_decision',
-    description: 'Submit a trading decision based on the market analysis',
+    description: 'Submit a trading decision for one coin. Call this tool once per coin you have a view on.',
     parameters: {
       type: 'object',
       properties: {
@@ -38,7 +38,7 @@ export class OpenAIAdapter implements LLMAdapter {
     this.model = config.model ?? 'gpt-4o'
   }
 
-  async decide(context: TradingContext): Promise<LLMDecision> {
+  async decide(context: TradingContext): Promise<LLMDecision[]> {
     const { system, user } = buildPrompt(context)
 
     const response = await this.client.chat.completions.create({
@@ -48,14 +48,21 @@ export class OpenAIAdapter implements LLMAdapter {
         { role: 'user', content: user },
       ],
       tools: [TOOL_DEFINITION],
-      tool_choice: { type: 'function', function: { name: 'make_trading_decision' } },
+      // 'required' forces at least one tool call but lets the model emit one
+      // per coin, instead of pinning it to a single call.
+      tool_choice: 'required',
     })
 
-    const toolCall = response.choices[0]?.message?.tool_calls?.[0]
-    if (!toolCall) {
-      return { action: 'hold', coin: '', size: 0, confidence: 0, reasoning: 'No tool call in response' }
+    // The model may return several tool calls in one turn — one per coin.
+    const toolCalls = response.choices[0]?.message?.tool_calls ?? []
+    const decisions = toolCalls
+      .filter(c => c.type === 'function' && c.function.name === 'make_trading_decision')
+      .map(c => JSON.parse(c.function.arguments) as LLMDecision)
+
+    if (decisions.length === 0) {
+      return [{ action: 'hold', coin: '', size: 0, confidence: 0, reasoning: 'No tool call in response' }]
     }
 
-    return JSON.parse(toolCall.function.arguments) as LLMDecision
+    return decisions
   }
 }

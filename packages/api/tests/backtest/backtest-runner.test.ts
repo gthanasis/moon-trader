@@ -177,11 +177,11 @@ describe('BacktestRunner', () => {
     await new BacktestRunner(config).run()
 
     expect(onStep).toHaveBeenCalledTimes(3)
-    // onStep now receives the full CycleResult; for a hold, that's the decision plus executed=false, reason='hold'.
-    const expectedCycleResult = { decision, executedDecision: decision, executed: false, reason: 'hold' }
-    expect(onStep).toHaveBeenNthCalledWith(1, 1, 3, new Date(0), expectedCycleResult)
-    expect(onStep).toHaveBeenNthCalledWith(2, 2, 3, new Date(intervalMs), expectedCycleResult)
-    expect(onStep).toHaveBeenNthCalledWith(3, 3, 3, new Date(2 * intervalMs), expectedCycleResult)
+    // onStep receives the cycle's CycleResult list; for a hold, one entry with executed=false, reason='hold'.
+    const expectedCycleResults = [{ decision, executedDecision: decision, executed: false, reason: 'hold' }]
+    expect(onStep).toHaveBeenNthCalledWith(1, 1, 3, new Date(0), expectedCycleResults)
+    expect(onStep).toHaveBeenNthCalledWith(2, 2, 3, new Date(intervalMs), expectedCycleResults)
+    expect(onStep).toHaveBeenNthCalledWith(3, 3, 3, new Date(2 * intervalMs), expectedCycleResults)
   })
 
   it('closes BTC position when adapter issues a sell decision', async () => {

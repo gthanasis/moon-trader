@@ -1,4 +1,5 @@
-import type { TradingContext, Candle } from '../common'
+import type { TradingContext, Candle, PromptPlaceholderName } from '../common'
+import { DEFAULT_STRATEGY_PROMPT, DEFAULT_PROMPT_TEMPLATE, CORE_SYSTEM_RULES } from '../common'
 
 function ema(values: number[], period: number): number {
   if (values.length === 0) return 0
@@ -77,30 +78,25 @@ function computeIndicators(candles: Candle[]): string {
   return `RSI(14)=${rsi14} ATR(14)=${atr14} vol=${vol}% ${ema20str} ${ema50str} trend=${trend} volZ=${volZ}`
 }
 
-export function buildPrompt(context: TradingContext): { system: string; user: string } {
-  const system = `You are a professional crypto trading assistant. Analyze market conditions and make precise, disciplined trading decisions.
+function renderCapital(ctx: TradingContext): string {
+  return `$${ctx.availableCapital.toFixed(2)}`
+}
 
-## Strategy Guidelines
-- Only trade top-tier cryptocurrencies (BTC/USDT, ETH/USDT, BNB/USDT, SOL/USDT, XRP/USDT, ADA/USDT, DOGE/USDT, AVAX/USDT, DOT/USDT, MATIC/USDT)
-- The engine enforces a minimum confidence threshold before executing buys; when uncertain, choose hold
-- Position sizing is enforced by the engine based on risk parameters
-- Always include a stop-loss level for buy orders (the engine enforces this — buys without one are rejected)
-- Consider macro conditions — avoid buying during extreme fear unless signal is very strong
-- When uncertain, choose hold
+function renderPositions(ctx: TradingContext): string {
+  if (ctx.positions.length === 0) return 'No open positions'
+  return ctx.positions
+    .map(p => {
+      const pct = ((p.currentPrice - p.entryPrice) / p.entryPrice) * 100
+      return `- ${p.coin}: $${p.size.toFixed(2)} at $${p.entryPrice.toFixed(2)} (current: $${p.currentPrice.toFixed(2)}, ${pct.toFixed(1)}%)`
+    })
+    .join('\n')
+}
 
-## Decision Tool
-Use the make_trading_decision tool to submit exactly one decision per analysis cycle.`
+function renderPrices(ctx: TradingContext): string {
+  const ohlcv = ctx.snapshot.ohlcv
+  if (Object.keys(ohlcv).length === 0) return 'No price data available'
 
-  const positionLines = context.positions.length === 0
-    ? 'No open positions'
-    : context.positions
-        .map(p => {
-          const pct = ((p.currentPrice - p.entryPrice) / p.entryPrice) * 100
-          return `- ${p.coin}: $${p.size.toFixed(2)} at $${p.entryPrice.toFixed(2)} (current: $${p.currentPrice.toFixed(2)}, ${pct.toFixed(1)}%)`
-        })
-        .join('\n')
-
-  const btcCandles = context.snapshot.ohlcv['BTC/USDT']
+  const btcCandles = ohlcv['BTC/USDT']
   const btcMacro = (() => {
     if (!btcCandles || btcCandles.length < 2) return null
     const first = btcCandles[0].close, last = btcCandles[btcCandles.length - 1].close
@@ -108,57 +104,100 @@ Use the make_trading_decision tool to submit exactly one decision per analysis c
     return `BTC 24h: ${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`
   })()
 
-  const ohlcvLines = Object.keys(context.snapshot.ohlcv).length === 0
-    ? 'No price data available'
-    : Object.entries(context.snapshot.ohlcv)
-        .map(([coin, candles]) => {
-          const recent = candles.slice(-20)
-          const rows = recent
-            .map(c => `  ${c.timestamp.toISOString()} O:${c.open} H:${c.high} L:${c.low} C:${c.close} V:${c.volume.toFixed(0)}`)
-            .join('\n')
-          const indicators = computeIndicators(candles)
-          const indicatorsLine = indicators === 'insufficient data' ? '' : ` — ${indicators}`
-          const macro = coin !== 'BTC/USDT' && btcMacro ? `  [${btcMacro}]\n` : ''
-          return `${coin}${indicatorsLine}\n${macro}${rows}`
-        })
-        .join('\n\n')
-
-  const signalLines = context.snapshot.signals.length === 0
-    ? 'No signals available'
-    : context.snapshot.signals
-        .slice(0, 20)
-        .map(s => {
-          const coins = s.coins ? ` [${s.coins.join(', ')}]` : ''
-          return `[${s.timestamp.toISOString()}] [${s.type.toUpperCase()}]${coins} ${s.content}`
-        })
+  return Object.entries(ohlcv)
+    .map(([coin, candles]) => {
+      const recent = candles.slice(-20)
+      const rows = recent
+        .map(c => `  ${c.timestamp.toISOString()} O:${c.open} H:${c.high} L:${c.low} C:${c.close} V:${c.volume.toFixed(0)}`)
         .join('\n')
+      const indicators = computeIndicators(candles)
+      const indicatorsLine = indicators === 'insufficient data' ? '' : ` — ${indicators}`
+      const macro = coin !== 'BTC/USDT' && btcMacro ? `  [${btcMacro}]\n` : ''
+      return `${coin}${indicatorsLine}\n${macro}${rows}`
+    })
+    .join('\n\n')
+}
 
-  const tradeLines = context.recentTrades.length === 0
-    ? 'No recent trades'
-    : context.recentTrades
-        .slice(0, 5)
-        .map(t => {
-          const pnl = t.pnl !== undefined ? ` P&L: ${t.pnl.toFixed(1)}%` : ''
-          return `- ${t.side.toUpperCase()} ${t.coin}: $${t.size}${pnl}`
-        })
-        .join('\n')
+function renderSignals(ctx: TradingContext): string {
+  if (ctx.snapshot.signals.length === 0) return 'No signals available'
+  return ctx.snapshot.signals
+    .slice(0, 20)
+    .map(s => {
+      const coins = s.coins ? ` [${s.coins.join(', ')}]` : ''
+      return `[${s.timestamp.toISOString()}] [${s.type.toUpperCase()}]${coins} ${s.content}`
+    })
+    .join('\n')
+}
 
-  const user = `## Current State
-Available capital: $${context.availableCapital.toFixed(2)}
+function renderTrades(ctx: TradingContext): string {
+  if (ctx.recentTrades.length === 0) return 'No recent trades'
+  return ctx.recentTrades
+    .slice(0, 5)
+    .map(t => {
+      const pnl = t.pnl !== undefined ? ` P&L: ${t.pnl.toFixed(1)}%` : ''
+      return `- ${t.side.toUpperCase()} ${t.coin}: $${t.size}${pnl}`
+    })
+    .join('\n')
+}
 
-## Open Positions
-${positionLines}
+function renderOpenOrders(ctx: TradingContext): string {
+  const open = ctx.openOrders.filter(o => o.status === 'open')
+  if (open.length === 0) return 'No open orders'
+  return open
+    .map(o => {
+      const price = o.price !== undefined ? ` @ $${o.price.toFixed(2)}` : ' @ market'
+      return `- ${o.side.toUpperCase()} ${o.coin}: $${o.size.toFixed(2)}${price}`
+    })
+    .join('\n')
+}
 
-## Price Data (recent candles)
-${ohlcvLines}
+/**
+ * Builds a renderer for one narration window — the bot's own recap of what it
+ * did over that period. Missing windows render as a short "no recap" line.
+ */
+function renderNarration(granularity: '6h' | 'day' | 'week' | 'month', label: string) {
+  return (ctx: TradingContext): string => ctx.narrations?.[granularity] ?? `No ${label} recap available yet`
+}
 
-## Recent Signals (most recent first)
-${signalLines}
+/** Placeholder name → renderer. Keys must match PROMPT_PLACEHOLDERS in settings. */
+const PLACEHOLDERS: Record<PromptPlaceholderName, (ctx: TradingContext) => string> = {
+  capital: renderCapital,
+  positions: renderPositions,
+  prices: renderPrices,
+  signals: renderSignals,
+  trades: renderTrades,
+  openOrders: renderOpenOrders,
+  narration6h: renderNarration('6h', 'last-6h'),
+  narrationDay: renderNarration('day', 'past-day'),
+  narrationWeek: renderNarration('week', 'past-week'),
+  narrationMonth: renderNarration('month', 'past-month'),
+}
 
-## Recent Trades
-${tradeLines}
+/** Substitutes `{known}` tokens with live data; unknown tokens are left literal. */
+function renderTemplate(template: string, context: TradingContext): string {
+  return template.replace(/\{(\w+)\}/g, (match, key: string) => {
+    const render = PLACEHOLDERS[key as PromptPlaceholderName]
+    return render ? render(context) : match
+  })
+}
 
-Analyze the above and submit your trading decision.`
+export interface PromptOverrides {
+  strategyPrompt: string
+  promptTemplate: string
+}
 
-  return { system, user }
+/**
+ * Builds the system + user messages. `context.promptOverrides`, when present,
+ * supplies the user-editable strategy text and template; otherwise the
+ * defaults are used. CORE_SYSTEM_RULES is always appended to the system
+ * message so the trading basics cannot be edited away.
+ */
+export function buildPrompt(context: TradingContext): { system: string; user: string } {
+  const strategy = context.promptOverrides?.strategyPrompt ?? DEFAULT_STRATEGY_PROMPT
+  const template = context.promptOverrides?.promptTemplate ?? DEFAULT_PROMPT_TEMPLATE
+
+  return {
+    system: `${strategy}\n\n${CORE_SYSTEM_RULES}`,
+    user: renderTemplate(template, context),
+  }
 }

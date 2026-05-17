@@ -1,4 +1,5 @@
 import { Injectable, Logger, type OnModuleInit, type OnModuleDestroy } from '@nestjs/common'
+import type { Subscription } from 'rxjs'
 import ccxt from 'ccxt'
 import { ClaudeAdapter, OpenAIAdapter, EvaluationCycle } from '../llm'
 import { TradingEngine, CcxtExchangeAdapter } from '../core'
@@ -9,6 +10,8 @@ import { DecisionRepository } from '../prisma/repositories/decision.repository'
 import { SignalRepository } from '../prisma/repositories/signal.repository'
 import { CandleRepository } from '../prisma/repositories/candle.repository'
 import { BotStateRepository } from '../prisma/repositories/bot-state.repository'
+import { NarrationRepository } from '../prisma/repositories/narration.repository'
+import type { NarrationGranularity } from '../common'
 import { SettingsService } from '../settings/settings.service'
 import { TelegramService } from '../telegram/telegram.service'
 import { EventsService } from '../events/events.service'
@@ -30,6 +33,7 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TradingService.name)
   private scheduler?: Scheduler
   private engine?: TradingEngine
+  private settingsSub?: Subscription
 
   constructor(
     private readonly tradeRepo: TradeRepository,
@@ -37,10 +41,34 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
     private readonly signalRepo: SignalRepository,
     private readonly candleRepo: CandleRepository,
     private readonly botState: BotStateRepository,
+    private readonly narrationRepo: NarrationRepository,
     private readonly settings: SettingsService,
     private readonly telegram: TelegramService,
     private readonly events: EventsService,
   ) {}
+
+  /**
+   * Latest narration recap per time window, formatted for the `{narration*}`
+   * prompt placeholders. A window with no narration yet is simply omitted —
+   * prompt-builder renders a "no recap" line for it. Fails open per window.
+   */
+  private async loadNarrations(): Promise<Partial<Record<NarrationGranularity, string>>> {
+    const windows: NarrationGranularity[] = ['6h', 'day', 'week', 'month']
+    const out: Partial<Record<NarrationGranularity, string>> = {}
+    await Promise.all(
+      windows.map(async g => {
+        try {
+          const n = await this.narrationRepo.findLatest(g)
+          if (n) {
+            out[g] = n.assessment ? `${n.summary}\n\nAssessment: ${n.assessment}` : n.summary
+          }
+        } catch (err) {
+          this.logger.warn(`Failed to load ${g} narration: ${String(err)}`)
+        }
+      }),
+    )
+    return out
+  }
 
   onModuleInit(): void {
     let config: LiveConfig
@@ -55,6 +83,7 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
 
   onModuleDestroy(): void {
     this.scheduler?.stop()
+    this.settingsSub?.unsubscribe()
   }
 
   /** Test/web seam: the trading engine, once the loop has started. */
@@ -160,6 +189,7 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
       riskPerTradePct: config.riskPerTradePct,
       minConfidence: config.minConfidence,
       getRecentTrades: () => this.tradeRepo.findRecentTrades(5),
+      getNarrations: () => this.loadNarrations(),
       notifier,
       onApprovalNeeded: approvalManager
         ? async decision => (await approvalManager.requestApproval(decision)) === 'approved'
@@ -208,6 +238,16 @@ export class TradingService implements OnModuleInit, OnModuleDestroy {
     // Apply persisted settings immediately so the first cycle and the schedule
     // reflect the web UI without waiting for an env-default-cadence tick.
     void applyRuntimeSettings()
+
+    // Re-apply on every save so a changed run interval reschedules the cron at
+    // once — otherwise it would only take effect after the next (old-cadence)
+    // cycle, and the dashboard countdown would expire with nothing happening.
+    this.settingsSub = this.events.stream().subscribe(event => {
+      if (event.type === 'settings_changed') {
+        this.logger.log('Settings changed — re-applying to the live loop')
+        void applyRuntimeSettings()
+      }
+    })
 
     // paper here is the env seed; applyRuntimeSettings() below overrides it
     // with the persisted paperMode (defaults to paper/true) before cycle one.

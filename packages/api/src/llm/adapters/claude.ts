@@ -5,7 +5,7 @@ import { buildPrompt } from '../prompt-builder'
 
 const TOOL_DEFINITION: Anthropic.Tool = {
   name: 'make_trading_decision',
-  description: 'Submit a trading decision based on the market analysis',
+  description: 'Submit a trading decision for one coin. Call this tool once per coin you have a view on.',
   input_schema: {
     type: 'object',
     properties: {
@@ -35,7 +35,7 @@ export class ClaudeAdapter implements LLMAdapter {
     this.model = config.model ?? 'claude-sonnet-4-6'
   }
 
-  async decide(context: TradingContext): Promise<LLMDecision> {
+  async decide(context: TradingContext): Promise<LLMDecision[]> {
     const { system, user } = buildPrompt(context)
 
     const response = await this.client.messages.create({
@@ -48,11 +48,15 @@ export class ClaudeAdapter implements LLMAdapter {
       tool_choice: { type: 'any' },
     })
 
-    const toolUse = response.content.find(b => b.type === 'tool_use')
-    if (!toolUse || toolUse.type !== 'tool_use') {
-      return { action: 'hold', coin: '', size: 0, confidence: 0, reasoning: 'No tool use in response' }
+    // Claude may emit several tool_use blocks in one turn — one per coin.
+    const decisions = response.content
+      .filter(b => b.type === 'tool_use')
+      .map(b => (b as Anthropic.ToolUseBlock).input as LLMDecision)
+
+    if (decisions.length === 0) {
+      return [{ action: 'hold', coin: '', size: 0, confidence: 0, reasoning: 'No tool use in response' }]
     }
 
-    return toolUse.input as LLMDecision
+    return decisions
   }
 }

@@ -10,6 +10,7 @@ import {
   type StepDecision,
 } from '../prisma/repositories/backtest-run.repository'
 import { PrismaService } from '../prisma/prisma.service'
+import { SettingsService } from '../settings/settings.service'
 
 /** Validated backtest parameters, parsed from an HTTP query. */
 export interface BacktestParams {
@@ -42,7 +43,17 @@ export class BacktestService {
     private readonly candles: CandleRepository,
     private readonly runs: BacktestRunRepository,
     private readonly prisma: PrismaService,
+    private readonly settings: SettingsService,
   ) {}
+
+  /**
+   * The currently saved bot prompt, so a backtest runs against the same
+   * strategy text and template the live bot would use.
+   */
+  private async promptOverrides(): Promise<{ strategyPrompt: string; promptTemplate: string }> {
+    const s = await this.settings.get()
+    return { strategyPrompt: s.strategyPrompt, promptTemplate: s.promptTemplate }
+  }
 
   /** Earliest and latest candle dates (YYYY-MM-DD), or null when no candles exist. */
   async getCandleDateRange(): Promise<{ from: string; to: string } | null> {
@@ -132,6 +143,7 @@ export class BacktestService {
       ohlcv,
       adapter: this.buildAdapter(params.model),
       intervalMs: params.intervalMs,
+      promptOverrides: await this.promptOverrides(),
     })
     const result = await runner.run()
     this.logger.log(`Backtest finished (unpersisted) in ${Date.now() - startedAt}ms`)
@@ -154,6 +166,7 @@ export class BacktestService {
         try {
           const ohlcv = await this.loadOhlcv(params.coins, params.from, params.to)
           const adapter = this.buildAdapter(params.model)
+          const promptOverrides = await this.promptOverrides()
 
           runId = await this.runs.create({
             from: params.from,
@@ -176,8 +189,10 @@ export class BacktestService {
             ohlcv,
             adapter,
             intervalMs: params.intervalMs,
-            onStep: (step: number, total: number, timestamp: Date, cycleResult: CycleResult) => {
-              const { decision, executedDecision, executed, reason } = cycleResult
+            promptOverrides,
+            onStep: (step: number, total: number, timestamp: Date, cycleResults: CycleResult[]) => {
+              // A cycle can yield several decisions (one per coin); emit each.
+              for (const { decision, executedDecision, executed, reason } of cycleResults) {
               const blockedReason = !executed && decision.action !== 'hold' ? reason : undefined
               const executedSize =
                 executed && executedDecision.size !== decision.size ? executedDecision.size : undefined
@@ -196,6 +211,7 @@ export class BacktestService {
               subscriber.next({
                 data: { type: 'step', step, total, timestamp: timestamp.toISOString(), decision: stepDecision },
               })
+              }
             },
           })
 

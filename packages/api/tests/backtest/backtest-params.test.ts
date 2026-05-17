@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { BacktestService } from '../../src/backtest/backtest.service'
 
 /** parseParams is pure — exercise it without DB dependencies. */
-const service = new BacktestService(null as never, null as never, null as never)
+const service = new BacktestService(null as never, null as never, null as never, null as never)
 
 describe('BacktestService.parseParams', () => {
   it('rejects missing from/to', () => {

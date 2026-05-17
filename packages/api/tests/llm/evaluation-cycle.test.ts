@@ -41,7 +41,7 @@ describe('EvaluationCycle', () => {
   it('returns hold result without executing when LLM decides to hold', async () => {
     mockDecide.mockResolvedValue(holdDecision)
     const cycle = new EvaluationCycle({ pipeline: mockPipeline as any, adapter: mockAdapter, engine: mockEngine as any, autoTradeLimit: 50 })
-    const result = await cycle.run()
+    const [result] = await cycle.run()
     expect(result.executed).toBe(false)
     expect(result.reason).toBe('hold')
     expect(mockExecute).not.toHaveBeenCalled()
@@ -50,7 +50,7 @@ describe('EvaluationCycle', () => {
   it('auto-executes buy below autoTradeLimit without approval', async () => {
     mockDecide.mockResolvedValue(buySmall)
     const cycle = new EvaluationCycle({ pipeline: mockPipeline as any, adapter: mockAdapter, engine: mockEngine as any, autoTradeLimit: 50 })
-    const result = await cycle.run()
+    const [result] = await cycle.run()
     expect(result.executed).toBe(true)
     expect(mockExecute).toHaveBeenCalledWith(buySmall)
   })
@@ -59,7 +59,7 @@ describe('EvaluationCycle', () => {
     mockDecide.mockResolvedValue(buyLarge)
     const onApprovalNeeded = vi.fn().mockResolvedValue(true)
     const cycle = new EvaluationCycle({ pipeline: mockPipeline as any, adapter: mockAdapter, engine: mockEngine as any, autoTradeLimit: 50, onApprovalNeeded })
-    const result = await cycle.run()
+    const [result] = await cycle.run()
     expect(onApprovalNeeded).toHaveBeenCalledWith(buyLarge)
     expect(result.executed).toBe(true)
   })
@@ -68,7 +68,7 @@ describe('EvaluationCycle', () => {
     mockDecide.mockResolvedValue(buyLarge)
     const onApprovalNeeded = vi.fn().mockResolvedValue(false)
     const cycle = new EvaluationCycle({ pipeline: mockPipeline as any, adapter: mockAdapter, engine: mockEngine as any, autoTradeLimit: 50, onApprovalNeeded })
-    const result = await cycle.run()
+    const [result] = await cycle.run()
     expect(result.executed).toBe(false)
     expect(result.reason).toMatch(/rejected/i)
     expect(mockExecute).not.toHaveBeenCalled()
@@ -77,7 +77,7 @@ describe('EvaluationCycle', () => {
   it('auto-executes large trade when no onApprovalNeeded callback provided', async () => {
     mockDecide.mockResolvedValue(buyLarge)
     const cycle = new EvaluationCycle({ pipeline: mockPipeline as any, adapter: mockAdapter, engine: mockEngine as any, autoTradeLimit: 50 })
-    const result = await cycle.run()
+    const [result] = await cycle.run()
     expect(result.executed).toBe(true)
     expect(mockExecute).toHaveBeenCalled()
   })
@@ -132,33 +132,43 @@ describe('EvaluationCycle — risk-based sizing (Task 5)', () => {
     expect(executedDecision.size).toBe(200)
   })
 
-  it('rejects buy when stop is too tight (< 0.3% away)', async () => {
-    // entry = 50000, stopLoss = 49900 → stopDistance = 0.2% < 0.3%
+  it('clamps a too-tight stop (< 0.3%) up to the 0.3% minimum and proceeds', async () => {
+    // entry = 50000, stopLoss = 49900 → 0.2% < 0.3% min → clamped to 49850 (0.3%)
     mockFetch.mockResolvedValue(snapshotWith(50000))
     mockDecide.mockResolvedValue({ action: 'buy', coin: 'BTC/USDT', size: 100, confidence: 0.9, reasoning: 'r', stopLoss: 49900 })
     const cycle = new EvaluationCycle({ pipeline: mockPipeline as any, adapter: mockAdapter, engine: mockEngine as any, autoTradeLimit: 500, riskPerTradePct: 0.01 })
-    const result = await cycle.run()
-    expect(result.executed).toBe(false)
-    expect(result.reason).toMatch(/stop.*tight|too tight/i)
-    expect(mockExecute).not.toHaveBeenCalled()
+    const [result] = await cycle.run()
+    expect(result.executed).toBe(true)
+    expect(result.executedDecision.stopLoss).toBeCloseTo(49850, 0)
+    expect(mockExecute).toHaveBeenCalled()
   })
 
-  it('rejects buy when stop is too loose (> 15% away)', async () => {
-    // entry = 50000, stopLoss = 40000 → stopDistance = 20% > 15%
+  it('clamps a too-loose stop (> 15%) down to the 15% maximum and proceeds', async () => {
+    // entry = 50000, stopLoss = 40000 → 20% > 15% max → clamped to 42500 (15%)
     mockFetch.mockResolvedValue(snapshotWith(50000))
     mockDecide.mockResolvedValue({ action: 'buy', coin: 'BTC/USDT', size: 100, confidence: 0.9, reasoning: 'r', stopLoss: 40000 })
     const cycle = new EvaluationCycle({ pipeline: mockPipeline as any, adapter: mockAdapter, engine: mockEngine as any, autoTradeLimit: 500, riskPerTradePct: 0.01 })
-    const result = await cycle.run()
-    expect(result.executed).toBe(false)
-    expect(result.reason).toMatch(/stop.*loose|too loose/i)
-    expect(mockExecute).not.toHaveBeenCalled()
+    const [result] = await cycle.run()
+    expect(result.executed).toBe(true)
+    expect(result.executedDecision.stopLoss).toBeCloseTo(42500, 0)
+    expect(mockExecute).toHaveBeenCalled()
+  })
+
+  it('leaves an in-band stop untouched', async () => {
+    // entry = 50000, stopLoss = 49000 → 2%, within [0.3%, 15%] → unchanged
+    mockFetch.mockResolvedValue(snapshotWith(50000))
+    mockDecide.mockResolvedValue({ action: 'buy', coin: 'BTC/USDT', size: 100, confidence: 0.9, reasoning: 'r', stopLoss: 49000 })
+    const cycle = new EvaluationCycle({ pipeline: mockPipeline as any, adapter: mockAdapter, engine: mockEngine as any, autoTradeLimit: 500, riskPerTradePct: 0.01 })
+    const [result] = await cycle.run()
+    expect(result.executed).toBe(true)
+    expect(result.executedDecision.stopLoss).toBe(49000)
   })
 
   it('rejects buy when no stop-loss is provided', async () => {
     mockFetch.mockResolvedValue(snapshotWith(50000))
     mockDecide.mockResolvedValue({ action: 'buy', coin: 'BTC/USDT', size: 75, confidence: 0.9, reasoning: 'r' })
     const cycle = new EvaluationCycle({ pipeline: mockPipeline as any, adapter: mockAdapter, engine: mockEngine as any, autoTradeLimit: 500, riskPerTradePct: 0.01 })
-    const result = await cycle.run()
+    const [result] = await cycle.run()
     expect(result.executed).toBe(false)
     expect(result.reason).toMatch(/stop.?loss/i)
     expect(mockExecute).not.toHaveBeenCalled()
@@ -169,7 +179,7 @@ describe('EvaluationCycle — risk-based sizing (Task 5)', () => {
     mockFetch.mockResolvedValue(snapshotWith(50000))
     mockDecide.mockResolvedValue({ action: 'buy', coin: 'BTC/USDT', size: 9999, confidence: 0.9, reasoning: 'r', stopLoss: 49000 })
     const cycle = new EvaluationCycle({ pipeline: mockPipeline as any, adapter: mockAdapter, engine: mockEngine as any, autoTradeLimit: 600, riskPerTradePct: 0.01 })
-    const result = await cycle.run()
+    const [result] = await cycle.run()
     // The LLM's original intent must be preserved in result.decision
     expect(result.decision.size).toBe(9999)
     // The engine must receive the risk-sized value via result.executedDecision
@@ -194,7 +204,7 @@ describe('EvaluationCycle — confidence threshold (Task 6)', () => {
   it('blocks non-hold decision when confidence is below threshold', async () => {
     mockDecide.mockResolvedValue({ action: 'buy', coin: 'BTC/USDT', size: 100, confidence: 0.55, reasoning: 'shaky' })
     const cycle = new EvaluationCycle({ pipeline: mockPipeline as any, adapter: mockAdapter, engine: mockEngine as any, autoTradeLimit: 500, minConfidence: 0.6 })
-    const result = await cycle.run()
+    const [result] = await cycle.run()
     expect(result.executed).toBe(false)
     expect(result.reason).toMatch(/confidence/i)
     expect(mockExecute).not.toHaveBeenCalled()
@@ -203,14 +213,14 @@ describe('EvaluationCycle — confidence threshold (Task 6)', () => {
   it('allows decision exactly at the confidence threshold', async () => {
     mockDecide.mockResolvedValue({ action: 'buy', coin: 'BTC/USDT', size: 100, confidence: 0.6, reasoning: 'ok', stopLoss: 50 })
     const cycle = new EvaluationCycle({ pipeline: mockPipeline as any, adapter: mockAdapter, engine: mockEngine as any, autoTradeLimit: 500, minConfidence: 0.6 })
-    const result = await cycle.run()
+    const [result] = await cycle.run()
     expect(result.executed).toBe(true)
   })
 
   it('never gates hold decisions on confidence', async () => {
     mockDecide.mockResolvedValue({ action: 'hold', coin: 'BTC/USDT', size: 0, confidence: 0.1, reasoning: 'low' })
     const cycle = new EvaluationCycle({ pipeline: mockPipeline as any, adapter: mockAdapter, engine: mockEngine as any, autoTradeLimit: 500, minConfidence: 0.9 })
-    const result = await cycle.run()
+    const [result] = await cycle.run()
     expect(result.executed).toBe(false)
     expect(result.reason).toBe('hold') // not a confidence block
   })
@@ -218,7 +228,7 @@ describe('EvaluationCycle — confidence threshold (Task 6)', () => {
   it('uses default threshold of 0.6 when minConfidence not set', async () => {
     mockDecide.mockResolvedValue({ action: 'buy', coin: 'BTC/USDT', size: 100, confidence: 0.59, reasoning: 'weak' })
     const cycle = new EvaluationCycle({ pipeline: mockPipeline as any, adapter: mockAdapter, engine: mockEngine as any, autoTradeLimit: 500 })
-    const result = await cycle.run()
+    const [result] = await cycle.run()
     expect(result.executed).toBe(false)
     expect(result.reason).toMatch(/confidence/i)
   })
@@ -230,7 +240,7 @@ describe('EvaluationCycle — confidence threshold (Task 6)', () => {
       pipeline: mockPipeline as any, adapter: mockAdapter, engine: mockEngine as any,
       autoTradeLimit: 500, minConfidence: 0.9,
     })
-    const result = await cycle.run()
+    const [result] = await cycle.run()
     expect(result.executed).toBe(true)
     expect(result.reason ?? '').not.toMatch(/confidence/i)
   })
@@ -266,7 +276,7 @@ describe('EvaluationCycle with notifier', () => {
       notifier,
     })
 
-    const result: CycleResult = await cycle.run()
+    const [result]: CycleResult[] = await cycle.run()
 
     expect(result.executed).toBe(true)
     expect(notifier.tradeExecuted).toHaveBeenCalledOnce()
@@ -324,3 +334,4 @@ describe('EvaluationCycle with notifier', () => {
     await expect(cycle.run()).resolves.not.toThrow()
   })
 })
+

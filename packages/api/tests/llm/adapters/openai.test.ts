@@ -37,7 +37,7 @@ describe('OpenAIAdapter', () => {
       action: 'sell', coin: 'ETH/USDT', size: 150, confidence: 0.75, reasoning: 'profit taking',
     }))
     const adapter = new OpenAIAdapter({ apiKey: 'test' })
-    const decision = await adapter.decide(emptyContext)
+    const [decision] = await adapter.decide(emptyContext)
     expect(decision.action).toBe('sell')
     expect(decision.coin).toBe('ETH/USDT')
     expect(decision.confidence).toBe(0.75)
@@ -46,7 +46,7 @@ describe('OpenAIAdapter', () => {
   it('falls back to hold when no tool call in response', async () => {
     mockCreate.mockResolvedValue({ choices: [{ message: { tool_calls: undefined } }] })
     const adapter = new OpenAIAdapter({ apiKey: 'test' })
-    const decision = await adapter.decide(emptyContext)
+    const [decision] = await adapter.decide(emptyContext)
     expect(decision.action).toBe('hold')
     expect(decision.reasoning).toMatch(/no tool call/i)
   })
@@ -65,11 +65,29 @@ describe('OpenAIAdapter', () => {
     expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ model: 'gpt-4o-mini' }))
   })
 
-  it('forces tool use by specifying function name in tool_choice', async () => {
+  it('forces at least one tool call with tool_choice required', async () => {
     mockCreate.mockResolvedValue(toolCallResponse({ action: 'hold', coin: '', size: 0, confidence: 0, reasoning: 'x' }))
     const adapter = new OpenAIAdapter({ apiKey: 'test' })
     await adapter.decide(emptyContext)
     const call = mockCreate.mock.calls[0][0]
-    expect(call.tool_choice).toEqual({ type: 'function', function: { name: 'make_trading_decision' } })
+    expect(call.tool_choice).toBe('required')
+  })
+
+  it('returns one decision per tool call when the model emits several', async () => {
+    mockCreate.mockResolvedValue({
+      choices: [{
+        message: {
+          tool_calls: [
+            { id: 'c1', type: 'function', function: { name: 'make_trading_decision', arguments: JSON.stringify({ action: 'buy', coin: 'BTC/USDT', size: 50, confidence: 0.8, reasoning: 'a' }) } },
+            { id: 'c2', type: 'function', function: { name: 'make_trading_decision', arguments: JSON.stringify({ action: 'hold', coin: 'ETH/USDT', size: 0, confidence: 0.4, reasoning: 'b' }) } },
+          ],
+        },
+      }],
+    })
+    const adapter = new OpenAIAdapter({ apiKey: 'test' })
+    const decisions = await adapter.decide(emptyContext)
+    expect(decisions).toHaveLength(2)
+    expect(decisions[0].coin).toBe('BTC/USDT')
+    expect(decisions[1].coin).toBe('ETH/USDT')
   })
 })

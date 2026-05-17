@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { type BotSettings, normalizeBotSettings } from '../common'
 import { BotStateRepository } from '../prisma/repositories/bot-state.repository'
+import { EventsService } from '../events/events.service'
 
 /**
  * Single source of truth for runtime-editable bot settings. Both the HTTP
@@ -11,7 +12,10 @@ import { BotStateRepository } from '../prisma/repositories/bot-state.repository'
 export class SettingsService {
   private readonly logger = new Logger(SettingsService.name)
 
-  constructor(private readonly botState: BotStateRepository) {}
+  constructor(
+    private readonly botState: BotStateRepository,
+    private readonly events: EventsService,
+  ) {}
 
   /** Current settings, with defaults filling any missing/invalid field. */
   async get(): Promise<BotSettings> {
@@ -32,6 +36,9 @@ export class SettingsService {
     } else {
       this.logger.log('Settings saved — no changes')
     }
+    // Signal the trading loop to re-apply settings now, so a changed run
+    // interval reschedules immediately instead of after the next cycle.
+    this.events.emit('settings_changed')
     return normalized
   }
 }

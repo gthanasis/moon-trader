@@ -1,4 +1,4 @@
-import type { LLMDecision, TradingContext, WorldSnapshot, Position, Order, Trade } from '../common'
+import type { LLMDecision, TradingContext, WorldSnapshot, Position, Order, Trade, NarrationGranularity } from '../common'
 import type { LLMAdapter } from './adapters/base'
 
 export interface PipelineLike {
@@ -6,7 +6,7 @@ export interface PipelineLike {
 }
 
 export interface EngineLike {
-  execute(decision: LLMDecision): Promise<{ executed: boolean; reason?: string; order?: Order }>
+  execute(decision: LLMDecision): Promise<{ executed: boolean; reason?: string; order?: Order; scaledIn?: boolean }>
   updatePositionPrice(coin: string, price: number): void
   checkStopLosses(): Promise<void>
   getPositions(): Position[]
@@ -31,6 +31,8 @@ export interface EvaluationCycleConfig {
   autoTradeLimit: number
   /** Called each cycle to populate recentTrades in the LLM context. */
   getRecentTrades?: () => Promise<Trade[]>
+  /** Called each cycle to populate the narration recaps in the LLM context. */
+  getNarrations?: () => Promise<Partial<Record<NarrationGranularity, string>>>
   onApprovalNeeded?: (decision: LLMDecision) => Promise<boolean>
   notifier?: NotifierLike
   /**
@@ -43,6 +45,8 @@ export interface EvaluationCycleConfig {
    * Decisions below this threshold are blocked before reaching the engine.
    */
   minConfidence?: number
+  /** User-editable prompt strings. When absent, prompt-builder defaults are used. */
+  promptOverrides?: { strategyPrompt: string; promptTemplate: string }
 }
 
 export interface CycleResult {
@@ -52,6 +56,8 @@ export interface CycleResult {
   executedDecision: LLMDecision
   executed: boolean
   reason?: string
+  /** True when the buy added to an existing position rather than opening a new one. */
+  scaledIn?: boolean
 }
 
 export class EvaluationCycle {
@@ -62,21 +68,33 @@ export class EvaluationCycle {
   }
 
   /** Applies runtime-editable settings without rebuilding the cycle. */
-  applySettings(settings: { minConfidence: number; riskPerTradePct: number; autoTradeLimit: number }): void {
+  applySettings(settings: {
+    minConfidence: number
+    riskPerTradePct: number
+    autoTradeLimit: number
+    strategyPrompt: string
+    promptTemplate: string
+  }): void {
     this.config.minConfidence = settings.minConfidence
     this.config.riskPerTradePct = settings.riskPerTradePct
     this.config.autoTradeLimit = settings.autoTradeLimit
+    this.config.promptOverrides = {
+      strategyPrompt: settings.strategyPrompt,
+      promptTemplate: settings.promptTemplate,
+    }
   }
 
-  async run(): Promise<CycleResult> {
-    const {
-      pipeline, adapter, engine, autoTradeLimit, onApprovalNeeded, notifier, getRecentTrades,
-      riskPerTradePct = 0.01,
-      minConfidence = 0.6,
-    } = this.config
+  /**
+   * Runs one evaluation cycle. The adapter may return several decisions — one
+   * per coin it has a view on — and each is gated, risk-sized, and executed
+   * independently, so a single cycle can open positions in multiple coins.
+   */
+  async run(): Promise<CycleResult[]> {
+    const { pipeline, adapter, engine, getRecentTrades, getNarrations } = this.config
 
     const snapshot = await pipeline.fetch()
     const recentTrades = (await getRecentTrades?.()) ?? []
+    const narrations = await getNarrations?.()
 
     const context: TradingContext = {
       snapshot,
@@ -84,6 +102,8 @@ export class EvaluationCycle {
       availableCapital: engine.availableCapital(),
       recentTrades,
       openOrders: engine.getOpenOrders(),
+      promptOverrides: this.config.promptOverrides,
+      narrations,
     }
 
     // Update position prices from latest candle closes, then enforce stop-losses.
@@ -95,7 +115,36 @@ export class EvaluationCycle {
     }
     await engine.checkStopLosses()
 
-    const decision = await adapter.decide(context)
+    // Adapters return one decision per coin; a legacy single-decision return is
+    // normalised to a one-element list.
+    const raw = await adapter.decide(context)
+    const decisions = Array.isArray(raw) ? raw : [raw]
+    if (decisions.length === 0) {
+      const decision: LLMDecision = { action: 'hold', coin: '', size: 0, confidence: 0, reasoning: 'no decision returned' }
+      return [{ decision, executedDecision: { ...decision }, executed: false, reason: 'hold' }]
+    }
+
+    // Execute sells before buys so capital freed this cycle is available to
+    // risk-size the buys. Decisions are gated and sized one at a time, each
+    // seeing the engine state left by the previous one.
+    const actionRank = { sell: 0, hold: 1, buy: 2 } as const
+    const ordered = [...decisions].sort((a, b) => actionRank[a.action] - actionRank[b.action])
+
+    const results: CycleResult[] = []
+    for (const decision of ordered) {
+      results.push(await this.evaluateDecision(decision, snapshot))
+    }
+    return results
+  }
+
+  /** Gates, risk-sizes, and executes a single decision. */
+  private async evaluateDecision(decision: LLMDecision, snapshot: WorldSnapshot): Promise<CycleResult> {
+    const {
+      engine, autoTradeLimit, onApprovalNeeded, notifier,
+      riskPerTradePct = 0.01,
+      minConfidence = 0.6,
+    } = this.config
+
     // executedDecision starts as a copy; risk sizing may override its size without touching decision.
     let executedDecision: LLMDecision = { ...decision }
 
@@ -113,23 +162,24 @@ export class EvaluationCycle {
       return { decision, executedDecision, executed: false, reason: 'buy rejected: no stop-loss provided' }
     }
 
-    // Risk-based sizing for buys with a stop-loss.
+    // Risk-based sizing for buys with a stop-loss. An out-of-band stop is
+    // clamped into [0.3%, 15%] rather than dropping the trade — a bad stop
+    // price should not cost a tradeable signal.
     if (decision.action === 'buy' && decision.stopLoss !== undefined) {
       const candles = snapshot.ohlcv[decision.coin]
       const currentPrice = candles?.[candles.length - 1]?.close
       if (currentPrice && currentPrice > 0) {
-        const stopDistance = (currentPrice - decision.stopLoss) / currentPrice
-        if (stopDistance < 0.003) {
-          return { decision, executedDecision, executed: false, reason: `Stop too tight: ${(stopDistance * 100).toFixed(2)}% < 0.3% minimum` }
-        }
-        if (stopDistance > 0.15) {
-          return { decision, executedDecision, executed: false, reason: `Stop too loose: ${(stopDistance * 100).toFixed(2)}% > 15% maximum` }
-        }
+        const MIN_STOP_DISTANCE = 0.003
+        const MAX_STOP_DISTANCE = 0.15
+        const rawDistance = (currentPrice - decision.stopLoss) / currentPrice
+        const stopDistance = Math.min(Math.max(rawDistance, MIN_STOP_DISTANCE), MAX_STOP_DISTANCE)
+        // When the stop was clamped, move stopLoss to match the clamped distance.
+        const stopLoss = stopDistance === rawDistance ? decision.stopLoss : currentPrice * (1 - stopDistance)
         const riskSize = Math.min(
           (engine.availableCapital() * riskPerTradePct) / stopDistance,
           autoTradeLimit,
         )
-        executedDecision = { ...decision, size: riskSize }
+        executedDecision = { ...decision, size: riskSize, stopLoss }
       }
     }
 
@@ -153,6 +203,6 @@ export class EvaluationCycle {
       })
     }
 
-    return { decision, executedDecision, executed: result.executed, reason: result.reason }
+    return { decision, executedDecision, executed: result.executed, reason: result.reason, scaledIn: result.scaledIn }
   }
 }

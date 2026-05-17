@@ -45,4 +45,20 @@ export class PositionTracker {
     }
   }
 
+  /**
+   * Adds to an existing position, recomputing total size and the
+   * volume-weighted average entry price. No-op when the position does not
+   * exist or the inputs are non-positive.
+   */
+  scaleIn(coin: string, addedSize: number, fillPrice: number): void {
+    const position = this.positions.get(coin)
+    if (!position || addedSize <= 0 || fillPrice <= 0) return
+    const oldQty = position.entryPrice > 0 ? position.size / position.entryPrice : 0
+    const addedQty = addedSize / fillPrice
+    const newSize = position.size + addedSize
+    const newQty = oldQty + addedQty
+    const newEntryPrice = newQty > 0 ? newSize / newQty : position.entryPrice
+    this.positions.set(coin, { ...position, size: newSize, entryPrice: newEntryPrice })
+  }
+
 }

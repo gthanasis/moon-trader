@@ -29,7 +29,7 @@ describe('ClaudeAdapter', () => {
       action: 'buy', coin: 'BTC/USDT', size: 100, confidence: 0.85, reasoning: 'strong signal',
     }))
     const adapter = new ClaudeAdapter({ apiKey: 'test' })
-    const decision = await adapter.decide(emptyContext)
+    const [decision] = await adapter.decide(emptyContext)
     expect(decision.action).toBe('buy')
     expect(decision.coin).toBe('BTC/USDT')
     expect(decision.confidence).toBe(0.85)
@@ -38,7 +38,7 @@ describe('ClaudeAdapter', () => {
   it('falls back to hold when no tool_use block in response', async () => {
     mockCreate.mockResolvedValue({ content: [{ type: 'text', text: 'I cannot decide' }] })
     const adapter = new ClaudeAdapter({ apiKey: 'test' })
-    const decision = await adapter.decide(emptyContext)
+    const [decision] = await adapter.decide(emptyContext)
     expect(decision.action).toBe('hold')
     expect(decision.reasoning).toMatch(/no tool use/i)
   })
@@ -71,5 +71,19 @@ describe('ClaudeAdapter', () => {
     await adapter.decide(emptyContext)
     const call = mockCreate.mock.calls[0][0]
     expect(call.tool_choice).toEqual({ type: 'any' })
+  })
+
+  it('returns one decision per tool_use block when the model emits several', async () => {
+    mockCreate.mockResolvedValue({
+      content: [
+        { type: 'tool_use', id: 'tu_1', name: 'make_trading_decision', input: { action: 'buy', coin: 'BTC/USDT', size: 50, confidence: 0.8, reasoning: 'a' } },
+        { type: 'tool_use', id: 'tu_2', name: 'make_trading_decision', input: { action: 'hold', coin: 'ETH/USDT', size: 0, confidence: 0.4, reasoning: 'b' } },
+      ],
+    })
+    const adapter = new ClaudeAdapter({ apiKey: 'test' })
+    const decisions = await adapter.decide(emptyContext)
+    expect(decisions).toHaveLength(2)
+    expect(decisions[0].coin).toBe('BTC/USDT')
+    expect(decisions[1].coin).toBe('ETH/USDT')
   })
 })

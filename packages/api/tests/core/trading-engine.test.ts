@@ -87,15 +87,41 @@ describe('TradingEngine', () => {
     expect(engine.availableCapital()).toBe(1000) // capital must be untouched
   })
 
-  it('rejects a buy when a position for that coin is already open', async () => {
+  it('scales into an existing position instead of rejecting a second buy', async () => {
     engine.updatePositionPrice('BTC/USDT', 50000)
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 100, confidence: 0.9, reasoning: 'first buy' })
+
+    const second = await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 100, confidence: 0.9, reasoning: 'add' })
+
+    expect(second.executed).toBe(true)
+    expect(second.scaledIn).toBe(true)
+    expect(engine.getPositions()).toHaveLength(1)
+    expect(engine.getPositions()[0].size).toBe(200)
+    expect(engine.availableCapital()).toBe(800)
+  })
+
+  it('rejects a scale-in that would exceed the max single position size', async () => {
+    engine.updatePositionPrice('BTC/USDT', 50000)
+    // First buy of 200 — within 25% of 1000 capital.
     await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 200, confidence: 0.9, reasoning: 'first buy' })
 
-    const second = await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 100, confidence: 0.9, reasoning: 'second buy' })
+    // Adding 100 → combined 300 > 25% cap (250) → rejected.
+    const second = await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 100, confidence: 0.9, reasoning: 'add too much' })
 
     expect(second.executed).toBe(false)
-    expect(second.reason).toMatch(/position already open/i)
-    expect(engine.getPositions()).toHaveLength(1)
+    expect(second.reason).toMatch(/max single position/i)
+    expect(engine.getPositions()[0].size).toBe(200)
+  })
+
+  it('recomputes a volume-weighted entry price on scale-in', async () => {
+    engine.updatePositionPrice('BTC/USDT', 50000)
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 100, confidence: 0.9, reasoning: 'first buy' })
+
+    engine.updatePositionPrice('BTC/USDT', 60000)
+    await engine.execute({ action: 'buy', coin: 'BTC/USDT', size: 60, confidence: 0.9, reasoning: 'add higher' })
+
+    // 0.002 BTC @50000 + 0.001 BTC @60000 = 0.003 BTC for $160 → avg entry 53333.33
+    expect(engine.getPositions()[0].entryPrice).toBeCloseTo(53333.33, 1)
   })
 
   it('allows buys on different coins simultaneously', async () => {

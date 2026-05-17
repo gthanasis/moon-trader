@@ -37,6 +37,8 @@ interface ExecuteResult {
   executed: boolean
   reason?: string
   order?: Order
+  /** True when a buy added to an existing position rather than opening a new one. */
+  scaledIn?: boolean
 }
 
 export class TradingEngine {
@@ -117,8 +119,9 @@ export class TradingEngine {
     if (decision.action === 'buy') {
       this.refreshDailyReset()
 
-      if (this.positions.get(decision.coin)) {
-        return { executed: false, reason: `Position already open for ${decision.coin}` }
+      const existing = this.positions.get(decision.coin)
+      if (existing) {
+        return this.scaleIn(decision, existing)
       }
 
       if (this.positions.getAll().length >= this.maxPositions) {
@@ -207,6 +210,59 @@ export class TradingEngine {
     }
 
     return { executed: false, reason: 'unknown action' }
+  }
+
+  /**
+   * Adds to an existing position rather than rejecting a repeat buy. The
+   * combined position size is capped at `maxSinglePositionPct` of the capital
+   * that could sit in this position (free capital + the amount already
+   * deployed here). The position keeps its original stop-loss/take-profit.
+   * Daily-reset is assumed already refreshed by the caller (`execute`).
+   */
+  private async scaleIn(decision: LLMDecision, existing: Position): Promise<ExecuteResult> {
+    const dailyDrawdown = this.dailyStartCapital - this.currentEquity()
+    if (dailyDrawdown > this.dailyStartCapital * this.dailyLossLimitPct) {
+      const lossPct = (dailyDrawdown / this.dailyStartCapital * 100).toFixed(1)
+      return { executed: false, reason: `Daily loss limit hit: lost ${lossPct}% today` }
+    }
+
+    const maxSize = (this.guard.availableCapital() + existing.size) * this.maxSinglePositionPct
+    const combinedSize = existing.size + decision.size
+    if (combinedSize > maxSize) {
+      return {
+        executed: false,
+        reason: `Scale-in rejected: combined size ${combinedSize.toFixed(2)} exceeds max single position (${(this.maxSinglePositionPct * 100).toFixed(0)}% = ${maxSize.toFixed(2)})`,
+      }
+    }
+
+    if (!this.guard.canTrade(decision.size)) {
+      return {
+        executed: false,
+        reason: `Insufficient capital: need ${decision.size}, have ${this.guard.availableCapital()}`,
+      }
+    }
+
+    const order = await this.orders.place({
+      coin: decision.coin,
+      side: 'buy',
+      size: decision.size,
+      price: this.currentPrices.get(decision.coin),
+    })
+
+    if (order.status !== 'filled') {
+      return { executed: false, reason: 'no fill price available' }
+    }
+    if (order.fillPrice <= 0) {
+      this.logger.error(`Invalid fill price for ${decision.coin}: ${order.fillPrice}`)
+      return { executed: false, reason: `Invalid fill price for ${decision.coin}` }
+    }
+
+    this.guard.reserve(decision.size)
+    this.guard.deductFee(decision.size * this.feeRate)
+    this.baseQty.set(decision.coin, (this.baseQty.get(decision.coin) ?? 0) + decision.size / order.fillPrice)
+    this.positions.scaleIn(decision.coin, decision.size, order.fillPrice)
+
+    return { executed: true, order, scaledIn: true }
   }
 
   updatePositionPrice(coin: string, price: number): void {

@@ -16,7 +16,7 @@ describe('runCycleWithPersistence — pause gating', () => {
 
   it('runs the cycle and persists the decision when not paused', async () => {
     const decision = { action: 'hold', coin: 'BTC/USDT', confidence: 0.5, reasoning: 'x' }
-    const cycle = { run: vi.fn(async () => ({ executed: false, decision, reason: undefined })) }
+    const cycle = { run: vi.fn(async () => [{ executed: false, decision, reason: undefined }]) }
     const decisionRepo = { saveDecision: vi.fn(async () => 'd1'), linkDecisionToTrade: vi.fn() }
 
     const result = await runCycleWithPersistence(
@@ -27,5 +27,26 @@ describe('runCycleWithPersistence — pause gating', () => {
     expect(cycle.run).toHaveBeenCalledOnce()
     expect(decisionRepo.saveDecision).toHaveBeenCalledWith(decision, 'blocked', null)
     expect(result).not.toBeNull()
+  })
+
+  it('does not persist a new trade row when the buy scaled into an existing position', async () => {
+    const decision = { action: 'buy', coin: 'BTC/USDT', confidence: 0.9, reasoning: 'add' }
+    const cycle = {
+      run: vi.fn(async () => [
+        { executed: true, scaledIn: true, decision, executedDecision: decision, reason: undefined },
+      ]),
+    }
+    const decisionRepo = { saveDecision: vi.fn(async () => 'd1'), linkDecisionToTrade: vi.fn() }
+    const tradeRepo = { saveTrade: vi.fn() }
+    const engine = { getPositions: vi.fn(() => []), isPaper: () => true }
+
+    await runCycleWithPersistence(
+      cycle as never, engine as never, decisionRepo as never, tradeRepo as never,
+      async () => false,
+    )
+
+    expect(decisionRepo.saveDecision).toHaveBeenCalledWith(decision, 'executed', null)
+    expect(tradeRepo.saveTrade).not.toHaveBeenCalled()
+    expect(decisionRepo.linkDecisionToTrade).not.toHaveBeenCalled()
   })
 })

@@ -5,6 +5,8 @@ export type AppEventType =
   | 'trade_opened'
   | 'trade_closed'
   | 'signals_ingested'
+  /** Runtime settings were saved — the trading loop re-applies them at once. */
+  | 'settings_changed'
 
 /**
  * A real-time event streamed over SSE (`GET /events`). `payload` shape depends

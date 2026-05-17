@@ -35,4 +35,18 @@ describe('PositionTracker', () => {
     expect(tracker.close('SOL/USDT')).toBeUndefined()
   })
 
+  it('scales into a position, recomputing size and a volume-weighted entry', () => {
+    tracker.open({ coin: 'BTC/USDT', size: 100, entryPrice: 50000, currentPrice: 50000 })
+    tracker.scaleIn('BTC/USDT', 60, 60000)
+    const p = tracker.get('BTC/USDT')!
+    // 0.002 BTC @50000 + 0.001 BTC @60000 = 0.003 BTC for $160 → avg entry 53333.33
+    expect(p.size).toBe(160)
+    expect(p.entryPrice).toBeCloseTo(53333.33, 1)
+  })
+
+  it('ignores scaleIn for a non-existent position', () => {
+    tracker.scaleIn('SOL/USDT', 50, 100)
+    expect(tracker.get('SOL/USDT')).toBeUndefined()
+  })
+
 })

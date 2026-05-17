@@ -127,6 +127,70 @@ describe('buildPrompt', () => {
     expect(user).toContain('No price data')
   })
 
+  describe('prompt overrides', () => {
+    it('uses a custom strategy prompt in the system message', () => {
+      const { system } = buildPrompt({
+        ...emptyContext,
+        promptOverrides: { strategyPrompt: 'CUSTOM STRATEGY TEXT', promptTemplate: '{capital}' },
+      })
+      expect(system).toContain('CUSTOM STRATEGY TEXT')
+    })
+
+    it('always appends the locked core rules even with a custom strategy', () => {
+      const { system } = buildPrompt({
+        ...emptyContext,
+        promptOverrides: { strategyPrompt: 'just vibes', promptTemplate: '{capital}' },
+      })
+      expect(system).toContain('make_trading_decision')
+      expect(system).toContain('stop-loss')
+    })
+
+    it('substitutes known placeholders with live data', () => {
+      const { user } = buildPrompt({
+        ...emptyContext,
+        promptOverrides: { strategyPrompt: 's', promptTemplate: 'cash={capital} pos={positions}' },
+      })
+      expect(user).toBe('cash=$1000.00 pos=No open positions')
+    })
+
+    it('leaves unknown {tokens} as literal text', () => {
+      const { user } = buildPrompt({
+        ...emptyContext,
+        promptOverrides: { strategyPrompt: 's', promptTemplate: 'hello {notathing} world' },
+      })
+      expect(user).toBe('hello {notathing} world')
+    })
+
+    it('renders a narration recap via the {narrationWeek} placeholder', () => {
+      const { user } = buildPrompt({
+        ...emptyContext,
+        narrations: { week: 'Quiet week — two small wins.' },
+        promptOverrides: { strategyPrompt: 's', promptTemplate: 'recap: {narrationWeek}' },
+      })
+      expect(user).toBe('recap: Quiet week — two small wins.')
+    })
+
+    it('shows a no-recap line when a narration window is absent', () => {
+      const { user } = buildPrompt({
+        ...emptyContext,
+        promptOverrides: { strategyPrompt: 's', promptTemplate: '{narrationDay}' },
+      })
+      expect(user).toContain('No past-day recap available')
+    })
+
+    it('renders open orders via the {openOrders} placeholder', () => {
+      const { user } = buildPrompt({
+        ...emptyContext,
+        openOrders: [
+          { id: 'o1', coin: 'SOL/USDT', side: 'buy', size: 75, status: 'open', createdAt: new Date() },
+        ],
+        promptOverrides: { strategyPrompt: 's', promptTemplate: '{openOrders}' },
+      })
+      expect(user).toContain('SOL/USDT')
+      expect(user).toContain('75')
+    })
+  })
+
   describe('pre-computed indicators', () => {
     function makeCandles(closes: number[]) {
       return closes.map((c, i) => ({

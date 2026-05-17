@@ -16,7 +16,9 @@ export function useAppEvents(): void {
   const qc = useQueryClient()
 
   useEffect(() => {
+    console.log('[app-events] opening EventSource →', eventsUrl())
     const es = new EventSource(eventsUrl())
+    es.onopen = () => console.log('[app-events] connected')
 
     es.onmessage = e => {
       let event: AppEvent
@@ -26,7 +28,12 @@ export function useAppEvents(): void {
         return
       }
 
-      qc.setQueryData<AppEvent[]>(BUFFER_KEY, prev => [event, ...(prev ?? [])].slice(0, MAX_EVENTS))
+      console.log('[app-events] received', event.type, 'at', event.at)
+      qc.setQueryData<AppEvent[]>(BUFFER_KEY, prev => {
+        const next = [event, ...(prev ?? [])].slice(0, MAX_EVENTS)
+        console.log('[app-events] buffer size →', next.length)
+        return next
+      })
 
       switch (event.type) {
         case 'trade_opened':
@@ -44,7 +51,10 @@ export function useAppEvents(): void {
       }
     }
 
-    return () => es.close()
+    return () => {
+      console.log('[app-events] closing EventSource')
+      es.close()
+    }
   }, [qc])
 }
 

@@ -22,6 +22,11 @@ export interface BacktestConfig {
   riskPerTradePct?: number
   /** Minimum LLM confidence for a buy to execute. Default: 0.6. */
   minConfidence?: number
+  /**
+   * User-editable prompt strings. When omitted, prompt-builder defaults are
+   * used. Supply both to backtest against a custom prompt configuration.
+   */
+  promptOverrides?: { strategyPrompt: string; promptTemplate: string }
   /** Maximum simultaneous open positions. Default: 5. */
   maxPositions?: number
   /** Maximum fraction of available capital in a single position. Default: 0.25 (25%). */
@@ -35,5 +40,5 @@ export interface BacktestConfig {
    * (EMA-50, ATR-14, RSI-14) time to warm up. Default: 0 (no skip). Set to 50 for production runs.
    */
   warmupBars?: number
-  onStep?: (step: number, total: number, timestamp: Date, cycleResult: CycleResult) => void | Promise<void>
+  onStep?: (step: number, total: number, timestamp: Date, cycleResults: CycleResult[]) => void | Promise<void>
 }
