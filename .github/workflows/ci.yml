@@ -36,3 +36,51 @@ jobs:
       - name: Audit (high severity)
         run: pnpm audit --audit-level=high
         continue-on-error: true
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Write a minimal .env for the stack
+        run: |
+          echo "POSTGRES_PASSWORD=ci" > .env
+          echo "PAPER=true" >> .env
+
+      - name: Build and start the production stack
+        run: docker compose -f docker-compose.prod.yml up -d --build
+
+      - name: Wait for the stack to be ready
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:4000/health >/dev/null \
+               && curl -sf http://localhost:3000 >/dev/null; then
+              echo "stack ready"; exit 0
+            fi
+            sleep 5
+          done
+          echo "stack did not become ready in time"; exit 1
+
+      - name: Run Playwright e2e
+        run: pnpm test:e2e
+
+      - name: Stack logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.prod.yml logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.prod.yml down -v

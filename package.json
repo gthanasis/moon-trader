@@ -21,10 +21,12 @@
     "build": "turbo run build",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
     "typecheck": "turbo run typecheck",
     "review-run": "node scripts/review-run.mjs"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@types/node": "^20.19.41",
     "turbo": "^2.9.14",
     "typescript": "^5.9.3",
