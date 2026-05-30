@@ -5,7 +5,7 @@ const API_URL = process.env['E2E_API_URL'] ?? 'http://localhost:4000'
 test('home page loads with the dashboard title', async ({ page }) => {
   const response = await page.goto('/')
   expect(response?.ok()).toBeTruthy()
-  await expect(page).toHaveTitle(/Trader Dashboard/)
+  await expect(page).toHaveTitle(/Moon Trader/i)
 })
 
 test('dashboard renders without a runtime error', async ({ page }) => {
